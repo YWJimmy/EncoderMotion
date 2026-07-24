@@ -1,0 +1,18 @@
+# CCS build output and workspace metadata
+Debug/
+Release/
+.settings/
+targetConfigs/
+
+# Compiler and linker artifacts
+*.o
+*.d
+*.out
+*.map
+*.xml
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
