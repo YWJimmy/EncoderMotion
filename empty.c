@@ -107,6 +107,8 @@ static const char *motion_state_text(MotionState state)
         return "DONE";
     case MOTION_TIMEOUT:
         return "TIMEOUT";
+    case MOTION_ENCODER_FAULT:
+        return "ENCFAULT";
     case MOTION_IDLE:
     default:
         return "IDLE";
@@ -229,7 +231,6 @@ int main(void)
             continue;
         }
 
-        /* Slow peripherals are serviced outside the fixed control tick. */
         oled_service(app_tick_now());
         serial_log_service();
         __WFI();

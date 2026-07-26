@@ -30,12 +30,10 @@ static void builder_put_char(TextBuilder *builder, char character)
     if ((builder == NULL) || builder->overflow) {
         return;
     }
-
     if (builder->length >= builder->capacity) {
         builder->overflow = true;
         return;
     }
-
     builder->data[builder->length++] = character;
 }
 
@@ -44,7 +42,6 @@ static void builder_put_string(TextBuilder *builder, const char *text)
     if (text == NULL) {
         return;
     }
-
     while (*text != '\0') {
         builder_put_char(builder, *text++);
     }
@@ -75,7 +72,6 @@ static void builder_put_i32(TextBuilder *builder, int32_t value)
     } else {
         magnitude = (uint32_t)value;
     }
-
     builder_put_u32(builder, magnitude);
 }
 
@@ -92,6 +88,8 @@ static const char *motion_state_text(MotionState state)
         return "DONE";
     case MOTION_TIMEOUT:
         return "TIMEOUT";
+    case MOTION_ENCODER_FAULT:
+        return "ENCFAULT";
     case MOTION_IDLE:
     default:
         return "IDLE";
@@ -110,7 +108,6 @@ static bool enqueue_message(const char *data, uint16_t length)
     if ((data == NULL) || (length == 0U)) {
         return true;
     }
-
     if (length > tx_free_space()) {
         gDroppedMessageCount++;
         return false;
@@ -134,7 +131,6 @@ static void enqueue_builder(TextBuilder *builder)
         gDroppedMessageCount++;
         return;
     }
-
     (void)enqueue_message(builder->data, builder->length);
 }
 
@@ -153,7 +149,7 @@ static void queue_event(uint32_t now_tick, MotionState state)
 
 static void queue_motion_line(uint32_t now_tick)
 {
-    char line[192];
+    char line[288];
     MotionDebugData debug;
     TextBuilder builder = {line, (uint16_t)sizeof(line), 0U, false};
 
@@ -173,10 +169,26 @@ static void queue_motion_line(uint32_t now_tick)
     builder_put_i32(&builder, debug.remaining_count);
     builder_put_string(&builder, ",bp=");
     builder_put_i32(&builder, debug.base_pwm);
+    builder_put_string(&builder, ",tl=");
+    builder_put_i32(&builder, debug.left_target_speed_x16);
+    builder_put_string(&builder, ",tr=");
+    builder_put_i32(&builder, debug.right_target_speed_x16);
+    builder_put_string(&builder, ",sl=");
+    builder_put_i32(&builder, debug.left_measured_speed_x16);
+    builder_put_string(&builder, ",sr=");
+    builder_put_i32(&builder, debug.right_measured_speed_x16);
+    builder_put_string(&builder, ",cl=");
+    builder_put_i32(&builder, debug.left_speed_pi_pwm);
+    builder_put_string(&builder, ",cr=");
+    builder_put_i32(&builder, debug.right_speed_pi_pwm);
+    builder_put_string(&builder, ",sc=");
+    builder_put_i32(&builder, debug.synchronization_speed_x16);
     builder_put_string(&builder, ",pl=");
     builder_put_i32(&builder, debug.left_pwm);
     builder_put_string(&builder, ",pr=");
     builder_put_i32(&builder, debug.right_pwm);
+    builder_put_string(&builder, ",ef=");
+    builder_put_u32(&builder, debug.encoder_fault_flags);
     builder_put_string(&builder, "\r\n");
     enqueue_builder(&builder);
 }
@@ -224,6 +236,9 @@ static void queue_system_line(uint32_t now_tick)
 
 void serial_log_init(void)
 {
+    static const char boot_message[] =
+        "BOOT,EncoderMotion speed-PI telemetry,115200,8N1\r\n";
+
     gTxHead = 0U;
     gTxTail = 0U;
     gTxCount = 0U;
@@ -232,9 +247,8 @@ void serial_log_init(void)
     gLastMotionState = motion_get_state();
 
     (void)enqueue_message(
-        "BOOT,EncoderMotion UART telemetry,115200,8N1\r\n",
-        (uint16_t)(sizeof(
-            "BOOT,EncoderMotion UART telemetry,115200,8N1\r\n") - 1U));
+        boot_message,
+        (uint16_t)(sizeof(boot_message) - 1U));
     queue_event(0U, gLastMotionState);
 }
 

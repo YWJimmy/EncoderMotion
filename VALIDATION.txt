@@ -1,19 +1,24 @@
-﻿EncoderMotion v3 validation record
+EncoderMotion v4 validation plan
 
-Completed:
-- serial_log.c passes strict C11 syntax checking with -Wall -Wextra -Werror -pedantic.
-- modified empty.c passes strict C11 syntax checking with a minimal DriverLib stub.
-- Host simulation produced BOOT, EVT, MOT and SYS records with the expected fields.
-- Simulated MOT line length: 68 characters in the representative test.
-- Simulated SYS line length: 82 characters in the representative test.
-- Telemetry uses a 1024-byte ring buffer and nonblocking TX FIFO service.
-- Control-tick code never calls a blocking UART transmit function.
-- Message overflow drops the entire message and increments qd.
-- ZIP path names are ASCII only.
+Static validation performed:
+- Strict C11 syntax checks for motion.c, serial_log.c and empty.c.
+- Integer ranges reviewed for speed x16, PI integral and synchronization terms.
+- Conditional-integration anti-windup implemented at PWM limits.
+- Encoder deltas are cleared at the start of every new motion.
+- Forward and reverse motion normalize encoder speed to a positive direction.
+- Left-ahead position error lowers left target speed and raises right target speed.
+- Encoder-fault detection uses net directional progress rather than raw transitions.
+- No blocking UART transmission was added to the 5 ms control task.
 
-Still requires CCS/board validation:
-- SysConfig 1.26.2 with MSPM0 SDK 2.11.00.07 accepts the UART0 TX settings in empty.syscfg.
-- Generated configuration contains UART_DEBUG_INST.
-- PA10 is routed through the LaunchPad XDS110 UART jumper path.
-- The selected COM port receives 115200 8N1 data.
-- UART logging does not increase app_tick overrun count during real OLED and motor operation.
+Target-board validation required:
+- Confirm sl/sr follow tl/tr at PWM 300.
+- Confirm no sustained PWM oscillation.
+- Verify ENCFAULT by temporarily disconnecting one encoder ground at low risk with
+  the wheels raised off the floor.
+- Recheck 3000 mm distance and lateral deviation.
+
+Host plant regression results:
+- Normal 3000 mm run with the simulated right motor 5% stronger:
+  state DONE, left count 21247, right count 21246, difference 1, ef=0.
+- Frozen left encoder:
+  state ENCFAULT after 42 control updates, ef=1, both PWM outputs zero.

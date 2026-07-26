@@ -1,25 +1,12 @@
-# ============================================================
-
-# Code Composer Studio build output and workspace metadata
-
-# ============================================================
-
+# CCS build output and workspace metadata
 Debug/
 Release/
 .settings/
 targetConfigs/
-
-# CCS / Eclipse temporary metadata
-
 .metadata/
 .launches/
 
-# ============================================================
-
-# Compiler, assembler, and linker artifacts
-
-# ============================================================
-
+# Compiler, assembler and linker artifacts
 *.o
 *.obj
 *.d
@@ -31,23 +18,13 @@ targetConfigs/
 *.bin
 *.lst
 
-# ============================================================
-
 # Patch and merge artifacts
-
-# ============================================================
-
 *.patch
 *.diff
 *.rej
 *.orig
 
-# ============================================================
-
-# Logs, backups, and temporary files
-
-# ============================================================
-
+# Logs, backups and temporary files
 *.log
 *.tmp
 *.temp
@@ -56,21 +33,9 @@ targetConfigs/
 *.swo
 *~
 
-# ============================================================
-
-# Editor configuration
-
-# ============================================================
-
+# Editor and operating-system files
 .vscode/
 .idea/
-
-# ============================================================
-
-# Operating-system files
-
-# ============================================================
-
 .DS_Store
 Thumbs.db
 Desktop.ini

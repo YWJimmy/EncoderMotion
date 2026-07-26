@@ -10,7 +10,8 @@ typedef enum {
     MOTION_RUNNING_TURN,
     MOTION_BRAKING,
     MOTION_DONE,
-    MOTION_TIMEOUT
+    MOTION_TIMEOUT,
+    MOTION_ENCODER_FAULT
 } MotionState;
 
 typedef struct {
@@ -21,6 +22,19 @@ typedef struct {
     int16_t base_pwm;
     int16_t left_pwm;
     int16_t right_pwm;
+
+    /* Speed values use counts/control-tick x 16. */
+    int32_t left_target_speed_x16;
+    int32_t right_target_speed_x16;
+    int32_t left_measured_speed_x16;
+    int32_t right_measured_speed_x16;
+    int32_t synchronization_speed_x16;
+
+    /* PI corrections are PWM command units. */
+    int16_t left_speed_pi_pwm;
+    int16_t right_speed_pi_pwm;
+
+    uint8_t encoder_fault_flags;
 } MotionDebugData;
 
 void motion_init(void);

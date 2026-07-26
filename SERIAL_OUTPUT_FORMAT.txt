@@ -1,12 +1,11 @@
-EncoderMotion serial output format
+MOT,t=<ms>,st=<state>,lp=<count>,rp=<count>,tg=<count>,rm=<count>,bp=<pwm>,tl=<x16>,tr=<x16>,sl=<x16>,sr=<x16>,cl=<pwm>,cr=<pwm>,sc=<x16>,pl=<pwm>,pr=<pwm>,ef=<flags>
 
-BOOT,EncoderMotion UART telemetry,115200,8N1
-EVT,t=<ms>,state=<state>
-MOT,t=<ms>,st=<state>,lp=<count>,rp=<count>,tg=<count>,rm=<count>,bp=<pwm>,pl=<pwm>,pr=<pwm>
-SYS,t=<ms>,lc=<count>,rc=<count>,lv=<n>,li=<n>,ld=<n>,rv=<n>,ri=<n>,rd=<n>,ol=<0|1>,oe=<n>,or=<n>,ov=<n>,qd=<n>
+Speed conversion:
+  actual counts per 5 ms = x16 field / 16
+  counts per second = x16 field * 12.5
 
-CSV-like parsing recommendation:
-- Split each line at commas.
-- The first token is the record type: BOOT, EVT, MOT or SYS.
-- Split the remaining tokens at the first equals sign.
-- Treat all numeric fields as signed or unsigned 32-bit integers as appropriate.
+Encoder fault flags:
+  ef=0 no fault
+  ef=1 left encoder/progress fault
+  ef=2 right encoder/progress fault
+  ef=3 both sides fault
