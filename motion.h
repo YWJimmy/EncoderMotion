@@ -13,30 +13,23 @@ typedef enum {
     MOTION_TIMEOUT
 } MotionState;
 
+typedef struct {
+    int32_t left_progress;
+    int32_t right_progress;
+    int32_t target_count;
+    int32_t remaining_count;
+    int16_t base_pwm;
+    int16_t left_pwm;
+    int16_t right_pwm;
+} MotionDebugData;
+
 void motion_init(void);
-
-/*
- * distance_mm：
- *   正数 = 前进
- *   负数 = 后退
- */
-bool motion_start_distance_mm(
-    int32_t distance_mm,
-    int16_t max_pwm);
-
-/*
- * angle_deg：
- *   正数 = 原地左转
- *   负数 = 原地右转
- */
-bool motion_start_turn_deg(
-    int32_t angle_deg,
-    int16_t max_pwm);
-
+bool motion_start_distance_mm(int32_t distance_mm, int16_t max_pwm);
+bool motion_start_turn_deg(int32_t angle_deg, int16_t max_pwm);
 void motion_update(void);
 void motion_abort(void);
-
 bool motion_is_busy(void);
 MotionState motion_get_state(void);
+void motion_get_debug(MotionDebugData *debug_data);
 
 #endif

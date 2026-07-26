@@ -1,0 +1,19 @@
+﻿EncoderMotion v3 validation record
+
+Completed:
+- serial_log.c passes strict C11 syntax checking with -Wall -Wextra -Werror -pedantic.
+- modified empty.c passes strict C11 syntax checking with a minimal DriverLib stub.
+- Host simulation produced BOOT, EVT, MOT and SYS records with the expected fields.
+- Simulated MOT line length: 68 characters in the representative test.
+- Simulated SYS line length: 82 characters in the representative test.
+- Telemetry uses a 1024-byte ring buffer and nonblocking TX FIFO service.
+- Control-tick code never calls a blocking UART transmit function.
+- Message overflow drops the entire message and increments qd.
+- ZIP path names are ASCII only.
+
+Still requires CCS/board validation:
+- SysConfig 1.26.2 with MSPM0 SDK 2.11.00.07 accepts the UART0 TX settings in empty.syscfg.
+- Generated configuration contains UART_DEBUG_INST.
+- PA10 is routed through the LaunchPad XDS110 UART jumper path.
+- The selected COM port receives 115200 8N1 data.
+- UART logging does not increase app_tick overrun count during real OLED and motor operation.

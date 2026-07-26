@@ -1,0 +1,12 @@
+EncoderMotion serial output format
+
+BOOT,EncoderMotion UART telemetry,115200,8N1
+EVT,t=<ms>,state=<state>
+MOT,t=<ms>,st=<state>,lp=<count>,rp=<count>,tg=<count>,rm=<count>,bp=<pwm>,pl=<pwm>,pr=<pwm>
+SYS,t=<ms>,lc=<count>,rc=<count>,lv=<n>,li=<n>,ld=<n>,rv=<n>,ri=<n>,rd=<n>,ol=<0|1>,oe=<n>,or=<n>,ov=<n>,qd=<n>
+
+CSV-like parsing recommendation:
+- Split each line at commas.
+- The first token is the record type: BOOT, EVT, MOT or SYS.
+- Split the remaining tokens at the first equals sign.
+- Treat all numeric fields as signed or unsigned 32-bit integers as appropriate.
