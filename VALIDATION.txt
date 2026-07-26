@@ -1,24 +1,28 @@
-EncoderMotion v4 validation plan
+﻿EncoderMotion v5 validation record
 
-Static validation performed:
-- Strict C11 syntax checks for motion.c, serial_log.c and empty.c.
-- Integer ranges reviewed for speed x16, PI integral and synchronization terms.
-- Conditional-integration anti-windup implemented at PWM limits.
-- Encoder deltas are cleared at the start of every new motion.
-- Forward and reverse motion normalize encoder speed to a positive direction.
-- Left-ahead position error lowers left target speed and raises right target speed.
-- Encoder-fault detection uses net directional progress rather than raw transitions.
-- No blocking UART transmission was added to the 5 ms control task.
-
-Target-board validation required:
-- Confirm sl/sr follow tl/tr at PWM 300.
-- Confirm no sustained PWM oscillation.
-- Verify ENCFAULT by temporarily disconnecting one encoder ground at low risk with
-  the wheels raised off the floor.
-- Recheck 3000 mm distance and lateral deviation.
+Static validation:
+- motion.c, serial_log.c, empty.c and app_tick.c pass strict C11 syntax checks.
+- app_tick pending periods are coalesced instead of replayed.
+- speed samples are divided by actual elapsed SysTick periods.
+- PI and synchronization integrals use elapsed-time scaling with a bounded gain step.
+- encoder-fault timing uses real elapsed periods and a startup grace interval.
+- no patch files are included.
+- all ZIP entry names are ASCII.
 
 Host plant regression results:
-- Normal 3000 mm run with the simulated right motor 5% stronger:
-  state DONE, left count 21247, right count 21246, difference 1, ef=0.
+- Straight 3000 mm with a simulated 40 ms block every 500 ms:
+  DONE, left=21248, right=21247, difference=1, ef=0.
+- 90 degree turn with the same blocking pattern:
+  DONE, left=-626, right=626, ef=0.
+- 350 ms simulated motor startup delay:
+  DONE without false encoder fault.
 - Frozen left encoder:
-  state ENCFAULT after 42 control updates, ef=1, both PWM outputs zero.
+  ENCFAULT, ef bit 0 set, both PWM outputs zero.
+- app_tick unit test:
+  three interrupts before servicing produce one pending control request and two overruns.
+
+Target-board validation still required:
+- CCS/MSPM0 SDK full build.
+- Verify normal MOT dt is usually 1.
+- Verify occasional dt > 1 does not stop motion.
+- Verify a real disconnected encoder still produces ENCFAULT.

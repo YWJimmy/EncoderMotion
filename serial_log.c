@@ -189,6 +189,10 @@ static void queue_motion_line(uint32_t now_tick)
     builder_put_i32(&builder, debug.right_pwm);
     builder_put_string(&builder, ",ef=");
     builder_put_u32(&builder, debug.encoder_fault_flags);
+    builder_put_string(&builder, ",dt=");
+    builder_put_u32(&builder, debug.control_elapsed_ticks);
+    builder_put_string(&builder, ",fg=");
+    builder_put_u32(&builder, debug.encoder_fault_grace_ticks);
     builder_put_string(&builder, "\r\n");
     enqueue_builder(&builder);
 }
@@ -237,7 +241,7 @@ static void queue_system_line(uint32_t now_tick)
 void serial_log_init(void)
 {
     static const char boot_message[] =
-        "BOOT,EncoderMotion speed-PI telemetry,115200,8N1\r\n";
+        "BOOT,EncoderMotion speed-PI timing-fix,115200,8N1\r\n";
 
     gTxHead = 0U;
     gTxTail = 0U;

@@ -35,6 +35,10 @@ typedef struct {
     int16_t right_speed_pi_pwm;
 
     uint8_t encoder_fault_flags;
+
+    /* Real SysTick periods represented by the most recent control update. */
+    uint16_t control_elapsed_ticks;
+    uint16_t encoder_fault_grace_ticks;
 } MotionDebugData;
 
 void motion_init(void);

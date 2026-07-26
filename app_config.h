@@ -85,10 +85,18 @@
 #define APP_SYNC_SPEED_CORRECTION_LIMIT_X16 (64L)
 
 /* ==================== Encoder-fault protection ==================== */
-#define APP_ENCODER_FAULT_MIN_PWM        (150)
+#define APP_ENCODER_FAULT_MIN_PWM        (180)
 #define APP_ENCODER_FAULT_MIN_TARGET_SPEED_X16 (80L)
-#define APP_ENCODER_FAULT_WINDOW_TICKS   (40U)  /* 200 ms */
-#define APP_ENCODER_FAULT_MIN_PROGRESS_COUNT (8L)
+
+/* Allow motors and gearboxes to overcome static friction before monitoring. */
+#define APP_ENCODER_FAULT_STARTUP_GRACE_TICKS (100U) /* 500 ms */
+
+/* A longer window avoids false faults during slow starts and short turns. */
+#define APP_ENCODER_FAULT_WINDOW_TICKS   (100U) /* 500 ms */
+#define APP_ENCODER_FAULT_MIN_PROGRESS_COUNT (12L)
+
+/* Limit controller gain scaling after an unusually long blocked interval. */
+#define APP_CONTROL_GAIN_ELAPSED_LIMIT_TICKS (20U)
 
 #define APP_ENCODER_FAULT_LEFT           (1U << 0)
 #define APP_ENCODER_FAULT_RIGHT          (1U << 1)

@@ -1,11 +1,17 @@
-MOT,t=<ms>,st=<state>,lp=<count>,rp=<count>,tg=<count>,rm=<count>,bp=<pwm>,tl=<x16>,tr=<x16>,sl=<x16>,sr=<x16>,cl=<pwm>,cr=<pwm>,sc=<x16>,pl=<pwm>,pr=<pwm>,ef=<flags>
+EncoderMotion v5 serial output additions
 
-Speed conversion:
-  actual counts per 5 ms = x16 field / 16
-  counts per second = x16 field * 12.5
+MOT,...,ef=<fault>,dt=<elapsed_ticks>,fg=<fault_grace_ticks>
 
-Encoder fault flags:
-  ef=0 no fault
-  ef=1 left encoder/progress fault
-  ef=2 right encoder/progress fault
-  ef=3 both sides fault
+dt:
+  Number of real 5 ms SysTick periods represented by the latest control update.
+  Usually 1. A value greater than 1 means the main loop was blocked and the controller
+  normalized encoder speed using the actual elapsed time.
+
+fg:
+  Remaining startup-grace periods before encoder-stall monitoring becomes active.
+  100 at motion start, then decreases to 0. One period is 5 ms.
+
+SYS ov:
+  Count of SysTick events that occurred while a control request was already pending.
+  ov may increase during slow OLED software-I2C service. v5 no longer replays those
+  missed periods as zero-time motion updates.

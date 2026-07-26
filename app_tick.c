@@ -3,13 +3,13 @@
 #include "app_config.h"
 #include "ti_msp_dl_config.h"
 
-static volatile uint16_t gPendingTicks;
+static volatile bool gTickPending;
 static volatile uint32_t gSystemTicks;
 static volatile uint32_t gOverrunCount;
 
 void app_tick_init(void)
 {
-    gPendingTicks = 0U;
+    gTickPending = false;
     gSystemTicks = 0U;
     gOverrunCount = 0U;
 
@@ -25,15 +25,13 @@ void app_tick_init(void)
 bool app_tick_take(void)
 {
     uint32_t primask;
-    bool available = false;
+    bool available;
 
     primask = __get_PRIMASK();
     __disable_irq();
 
-    if (gPendingTicks != 0U) {
-        gPendingTicks--;
-        available = true;
-    }
+    available = gTickPending;
+    gTickPending = false;
 
     __set_PRIMASK(primask);
     return available;
@@ -53,11 +51,11 @@ void SysTick_Handler(void)
 {
     gSystemTicks++;
 
-    if (gPendingTicks != 0U) {
+    if (gTickPending) {
         gOverrunCount++;
     }
 
-    if (gPendingTicks < UINT16_MAX) {
-        gPendingTicks++;
-    }
+    /* Keep only one pending control request. Real elapsed time is recovered
+     * from app_tick_now() inside motion_update(). */
+    gTickPending = true;
 }

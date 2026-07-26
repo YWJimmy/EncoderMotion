@@ -1,10 +1,9 @@
-feat(control): add wheel speed PI loop and encoder fault protection
+fix(control): prevent false short-motion stops from tick backlog
 
-- convert the position profile into per-wheel target encoder speeds
-- add independent left and right wheel speed PI controllers
-- apply cross-coupled position synchronization to target speeds
-- add fixed-point speed filtering and PI anti-windup
-- stop both motors when encoder progress is lost under load
-- expose target speed, measured speed, PI correction and fault flags in UART logs
-- calibrate wheel diameter to 66 mm and encoder CPR to 1469
-- extend long-distance motion timeout to 60 seconds
+- coalesce missed SysTick periods instead of replaying queued control calls
+- calculate wheel speed from encoder delta over the real elapsed tick count
+- scale PWM slew, PI integration, braking and timeout by elapsed time
+- ignore duplicate motion updates at the same system tick
+- add a 500 ms encoder-fault startup grace period
+- extend the encoder-fault observation window to 500 ms
+- expose control elapsed ticks and fault grace in UART telemetry
