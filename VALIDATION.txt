@@ -1,0 +1,30 @@
+Two-pass validation
+===================
+
+Pass 1 - source and interface validation
+- app_config.h retains the optimized button polarity and debounce definitions.
+- APP_LEFT_ENCODER_SIGN is +1.
+- APP_RIGHT_ENCODER_SIGN is -1.
+- APP_LEFT_MOTOR_DIRECTION_SIGN is +1.
+- APP_RIGHT_MOTOR_DIRECTION_SIGN is -1.
+- motor.c and motor.h expose matching init/enable/disable/set/stop/brake/getter APIs.
+- strict C11 compilation with -Wall -Wextra -Werror -pedantic passes.
+
+Pass 2 - direction behavior validation
+For logical motor_set(+300,+300):
+- left: AIN1=HIGH, AIN2=LOW
+- right: BIN1=LOW, BIN2=HIGH
+- both PWM compare values are equal
+- getters return +300,+300
+
+For logical motor_set(-300,-300):
+- left: AIN1=LOW, AIN2=HIGH
+- right: BIN1=HIGH, BIN2=LOW
+- getters return -300,-300
+
+Forward encoder normalization:
+- observed left forward count was negative; new left sign reverses it to positive
+- observed right reverse count was positive; after motor reversal its raw direction
+  reverses, and the new right sign converts forward travel to positive
+
+Physical-board validation is still required after flashing.

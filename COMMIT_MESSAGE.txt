@@ -1,6 +1,7 @@
-fix(build): split mixed-port USER_IO SysConfig instance
+fix(motion): align motor and encoder directions with vehicle forward
 
-- separate OLED, select button, and confirm button GPIO instances
-- use generated per-instance PORT and PIN macros
-- remove all references to nonexistent USER_IO_PORT
-- add a regression build check without the invalid shared-port macro
+- invert the mirror-mounted right motor at the TB6612 direction layer
+- reverse both encoder signs so forward wheel motion produces positive counts
+- keep PWM telemetry expressed in logical vehicle coordinates
+- preserve current wheel trims until a valid same-direction distance test
+- add compile-time validation for motor direction polarity
