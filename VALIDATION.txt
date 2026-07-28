@@ -1,16 +1,15 @@
-三轮检查记录
+Validation performed
+====================
+- Strict C11 syntax validation with MSPM0 API stubs.
+- Exhaustive 16-state transition-table test.
+- Stationary 00<->01 bounce test: committed count remains zero.
+- Stationary 00<->10 bounce test: committed count remains zero.
+- Forward full-cycle test: every four valid transitions commits +4.
+- Reverse full-cycle test: every four valid transitions commits -4.
+- Invalid two-bit jump test: state resynchronises, accumulator resets, count unchanged.
+- Atomic snapshot test: both deltas are captured and cleared together.
+- Delayed SysTick test: multiple interrupts produce one pending control update.
+- Position-controller host model tests: forward, reverse, left turn and right turn.
 
-第一轮：完整仓库结构与调用链
-- 检查 main 分支全部源文件、SysConfig、PWM、GPIO、OLED、UART。
-- 确认主要故障来自积压 tick 补跑、非原子编码器采样和未经标定的速度 PI。
-
-第二轮：控制公式与边界
-- 检查前进、后退、左转、右转方向归一化。
-- 检查距离/角度换算、减速区、PWM 限幅、不得倒转、双轮完成条件。
-- 检查 32 位 tick 回绕、长间隔、超时和制动状态。
-
-第三轮：静态构建与主机模型回归
-- 使用 GCC C11 -Wall -Wextra -Werror 编译 motion.c 主机测试。
-- 覆盖直行、反向、正负90度、随机1~8 tick调度间隔。
-- 覆盖左右电机5%模型差异、350ms起步迟滞和单侧编码器冻结。
-- 真实 CCS/实车仍需最终验证；硬件地线、轮胎和有效转向轮距不能由主机测试替代。
+Target-board build and real-wheel tests are still required because the container does
+not contain the exact CCS compiler, MSPM0 SDK generated files or physical hardware.

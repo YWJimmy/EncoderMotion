@@ -1,9 +1,6 @@
-无需删除任何文件。
+No file from the current GitHub main branch must be deleted.
 
-本包只覆盖同名文件。
-如果你的本地工程中存在仓库之外、由旧实验版本添加的以下文件，请删除或排除构建：
+Delete or exclude from build only if these obsolete local experiment files exist:
 - wheel_speed_pi.c
 - wheel_speed_pi.h
-- 任何第二份 motion.c / encoder.c
-
-GitHub 当前 main 分支没有这些文件，因此标准仓库不需要删除。
+- duplicate copies of motion.c or encoder.c in another source folder

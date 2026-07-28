@@ -1,10 +1,11 @@
-fix(control): replace unstable speed PI with deterministic position control
+fix(encoder): stabilise quadrature counting and unify motion timing
 
-- coalesce delayed SysTick requests and use real elapsed time
-- atomically sample both encoder counts and deltas
-- use separate straight and turn motion profiles
-- replace uncalibrated nested speed PI with conservative P-only synchronization
-- require both wheels to reach the target before braking
-- stop an arrived wheel without commanding reverse correction
-- make encoder fault timing use real elapsed ticks
-- add per-channel encoder edge and AB-state telemetry
+- commit encoder position only after a complete ordered AB cycle
+- preserve four-times count calibration by committing four counts per cycle
+- cancel stationary single-edge bounce inside the transition accumulator
+- atomically capture left and right count and delta values
+- drain newly pending GPIO edges inside the encoder ISR
+- coalesce delayed SysTick events instead of replaying zero-time updates
+- replace the uncalibrated speed PI loop with deterministic position control
+- separate straight and turn profiles and use real-time fault windows
+- add raw edge, committed-cycle and accumulator UART diagnostics

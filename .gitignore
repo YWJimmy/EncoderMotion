@@ -1,33 +1,30 @@
-# CCS / Eclipse build products
 Debug/
 Release/
 .settings/
+targetConfigs/
 .metadata/
-*.out
-*.map
-*.obj
+.launches/
 *.o
+*.obj
 *.d
-*.mk
+*.out
+*.elf
+*.map
 *.hex
 *.bin
 *.lst
-*.log
-*.launch
-
-# Generated SysConfig output
-ti_msp_dl_config.c
-ti_msp_dl_config.h
-
-# Temporary and patch files
 *.patch
 *.diff
-*.zip
+*.rej
+*.orig
+*.log
 *.tmp
 *.bak
+*.swp
+*.swo
 *~
-
-# OS/editor files
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
-.vscode/
+Desktop.ini
