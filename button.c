@@ -14,8 +14,8 @@ typedef struct {
 } ButtonRuntime;
 
 static ButtonRuntime gButtons[2] = {
-    {BUTTON_SELECT_PORT, BUTTON_SELECT_INPUT_PIN, 1U, 0U, 0U, 0U, 0U},
-    {BUTTON_CONFIRM_PORT, BUTTON_CONFIRM_INPUT_PIN, 0U, 1U, 1U, 0U, 0U}
+    {BUTTON_SELECT_PORT, BUTTON_SELECT_S1_PIN, 1U, 0U, 0U, 0U, 0U},
+    {BUTTON_CONFIRM_PORT, BUTTON_CONFIRM_S2_PIN, 0U, 1U, 1U, 0U, 0U}
 };
 
 void button_init(void)
