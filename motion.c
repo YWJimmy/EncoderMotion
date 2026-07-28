@@ -3,7 +3,6 @@
 #include <stddef.h>
 
 #include "app_config.h"
-#include "app_tick.h"
 #include "encoder.h"
 #include "motor.h"
 
@@ -14,11 +13,6 @@ typedef struct {
     int32_t target_left;
     int32_t target_right;
 
-    int32_t sync_integral;
-    int32_t sync_previous_error;
-
-    int32_t left_speed_integral;
-    int32_t right_speed_integral;
     int32_t left_filtered_speed_x16;
     int32_t right_filtered_speed_x16;
 
@@ -30,16 +24,30 @@ typedef struct {
     uint8_t encoder_fault_flags;
 
     uint32_t last_control_tick;
-    uint16_t last_control_elapsed_ticks;
+    bool control_time_initialized;
+    uint32_t elapsed_ticks;
+    uint16_t brake_ticks;
 
     int16_t max_pwm;
     int16_t current_base_pwm;
     int16_t last_left_pwm;
     int16_t last_right_pwm;
-    uint16_t brake_ticks;
-    uint32_t elapsed_ticks;
     MotionDebugData debug;
 } MotionController;
+
+typedef struct {
+    int16_t control_max_pwm;
+    int16_t minimum_pwm;
+    int16_t approach_pwm;
+    int32_t decel_counts;
+    int32_t approach_counts;
+    int32_t tolerance_counts;
+    int32_t sync_deadband_counts;
+    int32_t sync_kp_div;
+    int32_t sync_limit_pwm;
+    int32_t left_trim_permille;
+    int32_t right_trim_permille;
+} MotionProfile;
 
 static MotionController gMotion;
 
@@ -59,9 +67,12 @@ static int32_t clamp_i32(int32_t value, int32_t minimum, int32_t maximum)
     return value;
 }
 
-static int16_t min_i16(int16_t a, int16_t b)
+static uint16_t clamp_elapsed_ticks(uint32_t elapsed_ticks)
 {
-    return a < b ? a : b;
+    if (elapsed_ticks > APP_CONTROL_ELAPSED_LIMIT_TICKS) {
+        return APP_CONTROL_ELAPSED_LIMIT_TICKS;
+    }
+    return (uint16_t)elapsed_ticks;
 }
 
 static int32_t distance_mm_to_counts(int32_t distance_mm)
@@ -86,7 +97,7 @@ static int32_t turn_deg_to_counts(int32_t angle_deg)
 {
     int64_t numerator =
         (int64_t)abs_i32(angle_deg) *
-        APP_WHEEL_TRACK_MM *
+        APP_TURN_EFFECTIVE_TRACK_MM *
         APP_ENCODER_COUNTS_PER_REV;
     int64_t denominator =
         360LL * APP_WHEEL_DIAMETER_MM;
@@ -95,74 +106,103 @@ static int32_t turn_deg_to_counts(int32_t angle_deg)
         (numerator + denominator / 2LL) / denominator);
 }
 
-static int16_t approach_profile(int32_t remaining, int16_t max_pwm)
+static MotionProfile get_motion_profile(MotionState state)
+{
+    MotionProfile profile;
+
+    if (state == MOTION_RUNNING_TURN) {
+        profile.control_max_pwm = APP_TURN_CONTROL_MAX_PWM;
+        profile.minimum_pwm = APP_TURN_MIN_PWM;
+        profile.approach_pwm = APP_TURN_APPROACH_PWM;
+        profile.decel_counts = APP_TURN_DECEL_COUNTS;
+        profile.approach_counts = APP_TURN_APPROACH_COUNTS;
+        profile.tolerance_counts = APP_TURN_TOLERANCE_COUNTS;
+        profile.sync_deadband_counts = APP_TURN_SYNC_DEADBAND_COUNTS;
+        profile.sync_kp_div = APP_TURN_SYNC_KP_DIV;
+        profile.sync_limit_pwm = APP_TURN_SYNC_LIMIT_PWM;
+        profile.left_trim_permille = APP_TURN_LEFT_TRIM_PERMILLE;
+        profile.right_trim_permille = APP_TURN_RIGHT_TRIM_PERMILLE;
+    } else {
+        profile.control_max_pwm = APP_STRAIGHT_CONTROL_MAX_PWM;
+        profile.minimum_pwm = APP_STRAIGHT_MIN_PWM;
+        profile.approach_pwm = APP_STRAIGHT_APPROACH_PWM;
+        profile.decel_counts = APP_STRAIGHT_DECEL_COUNTS;
+        profile.approach_counts = APP_STRAIGHT_APPROACH_COUNTS;
+        profile.tolerance_counts = APP_STRAIGHT_TOLERANCE_COUNTS;
+        profile.sync_deadband_counts = APP_STRAIGHT_SYNC_DEADBAND_COUNTS;
+        profile.sync_kp_div = APP_STRAIGHT_SYNC_KP_DIV;
+        profile.sync_limit_pwm = APP_STRAIGHT_SYNC_LIMIT_PWM;
+        profile.left_trim_permille = APP_STRAIGHT_LEFT_TRIM_PERMILLE;
+        profile.right_trim_permille = APP_STRAIGHT_RIGHT_TRIM_PERMILLE;
+    }
+
+    return profile;
+}
+
+static int16_t position_profile_pwm(
+    int32_t remaining,
+    int16_t max_pwm,
+    const MotionProfile *profile)
 {
     int32_t magnitude;
     int32_t span;
 
-    if (remaining <= APP_POSITION_TOLERANCE_COUNT) {
+    if ((profile == NULL) ||
+        (remaining <= profile->tolerance_counts)) {
         return 0;
     }
 
-    if (remaining <= APP_POSITION_APPROACH_COUNTS) {
-        span =
-            APP_POSITION_APPROACH_COUNTS -
-            APP_POSITION_TOLERANCE_COUNT;
-        magnitude = APP_POSITION_APPROACH_PWM;
+    if (remaining <= profile->approach_counts) {
+        span = profile->approach_counts - profile->tolerance_counts;
+        magnitude = profile->approach_pwm;
         if (span > 0) {
             magnitude +=
-                ((remaining - APP_POSITION_TOLERANCE_COUNT) *
-                 (APP_POSITION_MIN_PWM - APP_POSITION_APPROACH_PWM)) /
+                ((remaining - profile->tolerance_counts) *
+                 (profile->minimum_pwm - profile->approach_pwm)) /
                 span;
         }
         return (int16_t)clamp_i32(
             magnitude,
-            APP_POSITION_APPROACH_PWM,
-            APP_POSITION_MIN_PWM);
+            profile->approach_pwm,
+            profile->minimum_pwm);
     }
 
-    if (remaining < APP_POSITION_DECEL_COUNTS) {
-        span =
-            APP_POSITION_DECEL_COUNTS -
-            APP_POSITION_APPROACH_COUNTS;
-        magnitude = APP_POSITION_MIN_PWM;
+    if (remaining < profile->decel_counts) {
+        span = profile->decel_counts - profile->approach_counts;
+        magnitude = profile->minimum_pwm;
         if (span > 0) {
             magnitude +=
-                ((remaining - APP_POSITION_APPROACH_COUNTS) *
-                 (max_pwm - APP_POSITION_MIN_PWM)) /
+                ((remaining - profile->approach_counts) *
+                 (max_pwm - profile->minimum_pwm)) /
                 span;
         }
         return (int16_t)clamp_i32(
             magnitude,
-            APP_POSITION_MIN_PWM,
+            profile->minimum_pwm,
             max_pwm);
     }
 
     return max_pwm;
 }
 
-static int16_t slew_base_pwm(
+static int16_t slew_pwm(
     int16_t current,
     int16_t target,
-    uint16_t elapsed_ticks)
+    uint16_t elapsed_ticks,
+    int16_t startup_pwm)
 {
-    int32_t step_ticks = elapsed_ticks;
     int32_t updated = current;
-
-    if (step_ticks > (int32_t)APP_CONTROL_GAIN_ELAPSED_LIMIT_TICKS) {
-        step_ticks = APP_CONTROL_GAIN_ELAPSED_LIMIT_TICKS;
-    }
 
     if (target > current) {
         if (current == 0) {
-            return min_i16(target, APP_POSITION_MIN_PWM);
+            return target < startup_pwm ? target : startup_pwm;
         }
-        updated += APP_MOTOR_ACCEL_STEP * step_ticks;
+        updated += (int32_t)APP_MOTOR_ACCEL_STEP * elapsed_ticks;
         if (updated > target) {
             updated = target;
         }
     } else if (target < current) {
-        updated -= APP_MOTOR_DECEL_STEP * step_ticks;
+        updated -= (int32_t)APP_MOTOR_DECEL_STEP * elapsed_ticks;
         if (updated < target) {
             updated = target;
         }
@@ -171,203 +211,131 @@ static int16_t slew_base_pwm(
     return (int16_t)updated;
 }
 
-static int32_t pwm_to_speed_x16(int32_t pwm)
-{
-    return
-        (pwm * APP_SPEED_FULL_SCALE_COUNTS_PER_TICK_X16 + 500L) /
-        1000L;
-}
-
-static int32_t speed_x16_to_pwm(int32_t speed_x16)
-{
-    if (speed_x16 <= 0) {
-        return 0;
-    }
-
-    return
-        (speed_x16 * 1000L +
-         APP_SPEED_FULL_SCALE_COUNTS_PER_TICK_X16 / 2L) /
-        APP_SPEED_FULL_SCALE_COUNTS_PER_TICK_X16;
-}
-
-static int32_t update_filtered_speed(
-    int32_t filtered_speed_x16,
+static int32_t filtered_speed_x16(
+    int32_t previous,
     int32_t normalized_delta,
-    uint16_t elapsed_ticks)
+    uint32_t elapsed_ticks)
 {
-    int32_t sample_x16;
+    int32_t sample;
     int32_t filter_steps;
 
     if (elapsed_ticks == 0U) {
-        return filtered_speed_x16;
+        return previous;
     }
 
-    sample_x16 =
-        (normalized_delta * 16L) / (int32_t)elapsed_ticks;
-
-    filter_steps = elapsed_ticks;
+    sample = (normalized_delta * 16L) / (int32_t)elapsed_ticks;
+    filter_steps = (int32_t)elapsed_ticks;
     if (filter_steps > APP_SPEED_FILTER_DIV) {
         filter_steps = APP_SPEED_FILTER_DIV;
     }
 
-    return
-        filtered_speed_x16 +
-        ((sample_x16 - filtered_speed_x16) * filter_steps) /
-        APP_SPEED_FILTER_DIV;
+    return previous +
+        ((sample - previous) * filter_steps) / APP_SPEED_FILTER_DIV;
 }
 
-static int32_t synchronization_speed_correction_x16(
-    int32_t left_travel,
-    int32_t right_travel,
-    int32_t remaining,
-    uint16_t elapsed_ticks)
+static int32_t synchronization_correction_pwm(
+    int32_t error,
+    const MotionProfile *profile)
 {
-    int32_t error = left_travel - right_travel;
-    int32_t derivative;
     int32_t correction;
-    int32_t gain_ticks = elapsed_ticks;
 
-    if (gain_ticks <= 0) {
-        gain_ticks = 1;
-    } else if (gain_ticks > (int32_t)APP_CONTROL_GAIN_ELAPSED_LIMIT_TICKS) {
-        gain_ticks = APP_CONTROL_GAIN_ELAPSED_LIMIT_TICKS;
-    }
-
-    derivative =
-        (error - gMotion.sync_previous_error) /
-        (int32_t)elapsed_ticks;
-    gMotion.sync_previous_error = error;
-
-    if (remaining > APP_POSITION_APPROACH_COUNTS) {
-        gMotion.sync_integral = clamp_i32(
-            gMotion.sync_integral + error * gain_ticks,
-            -APP_SYNC_SPEED_INTEGRAL_LIMIT,
-            APP_SYNC_SPEED_INTEGRAL_LIMIT);
-    } else {
-        gMotion.sync_integral /= 2;
-    }
-
-    correction =
-        APP_SYNC_SPEED_KP_X16 * error +
-        gMotion.sync_integral / APP_SYNC_SPEED_KI_DIV +
-        APP_SYNC_SPEED_KD_X16 * derivative;
-
-    return clamp_i32(
-        correction,
-        -APP_SYNC_SPEED_CORRECTION_LIMIT_X16,
-        APP_SYNC_SPEED_CORRECTION_LIMIT_X16);
-}
-
-static int32_t calculate_speed_pi_correction(
-    int32_t target_speed_x16,
-    int32_t measured_speed_x16,
-    int32_t *integral,
-    int32_t feedforward_pwm,
-    int16_t max_pwm,
-    uint16_t elapsed_ticks)
-{
-    int32_t error;
-    int32_t old_integral;
-    int32_t candidate_integral;
-    int32_t correction;
-    int32_t unclamped_output;
-
-    if ((integral == NULL) || (target_speed_x16 <= 0)) {
-        if (integral != NULL) {
-            *integral = 0;
-        }
+    if (profile == NULL) {
         return 0;
     }
 
-    error = target_speed_x16 - measured_speed_x16;
-    old_integral = *integral;
-    {
-        int32_t gain_ticks = elapsed_ticks;
-        if (gain_ticks > (int32_t)APP_CONTROL_GAIN_ELAPSED_LIMIT_TICKS) {
-            gain_ticks = APP_CONTROL_GAIN_ELAPSED_LIMIT_TICKS;
-        }
-        candidate_integral = clamp_i32(
-        old_integral + error * gain_ticks,
-        -APP_SPEED_PI_INTEGRAL_LIMIT,
-        APP_SPEED_PI_INTEGRAL_LIMIT);
+    if (abs_i32(error) <= profile->sync_deadband_counts) {
+        return 0;
     }
 
-    correction =
-        error * APP_SPEED_PI_KP_NUM / APP_SPEED_PI_KP_DIV +
-        candidate_integral / APP_SPEED_PI_KI_DIV;
-    correction = clamp_i32(
+    correction = error / profile->sync_kp_div;
+    return clamp_i32(
         correction,
-        -APP_SPEED_PI_CORRECTION_LIMIT,
-        APP_SPEED_PI_CORRECTION_LIMIT);
-
-    unclamped_output = feedforward_pwm + correction;
-
-    /* Conditional integration prevents windup at either actuator limit. */
-    if (((unclamped_output > max_pwm) && (error > 0)) ||
-        ((unclamped_output < 0) && (error < 0))) {
-        candidate_integral = old_integral;
-        correction =
-            error * APP_SPEED_PI_KP_NUM / APP_SPEED_PI_KP_DIV +
-            candidate_integral / APP_SPEED_PI_KI_DIV;
-        correction = clamp_i32(
-            correction,
-            -APP_SPEED_PI_CORRECTION_LIMIT,
-            APP_SPEED_PI_CORRECTION_LIMIT);
-    }
-
-    *integral = candidate_integral;
-    return correction;
+        -profile->sync_limit_pwm,
+        profile->sync_limit_pwm);
 }
 
-static int16_t wheel_speed_controller(
-    int32_t target_speed_x16,
-    int32_t measured_speed_x16,
-    int32_t *integral,
-    int16_t max_pwm,
-    uint16_t elapsed_ticks,
-    int16_t *pi_correction_out)
+static int16_t apply_trim(int16_t pwm, int32_t trim_permille)
 {
-    int32_t feedforward_pwm;
-    int32_t correction;
-    int32_t output;
+    int32_t trimmed =
+        ((int32_t)pwm * trim_permille + 500L) / 1000L;
 
-    feedforward_pwm = speed_x16_to_pwm(target_speed_x16);
-    correction = calculate_speed_pi_correction(
-        target_speed_x16,
-        measured_speed_x16,
-        integral,
-        feedforward_pwm,
-        max_pwm,
-        elapsed_ticks);
-
-    output = clamp_i32(
-        feedforward_pwm + correction,
-        0,
-        max_pwm);
-
-    if (pi_correction_out != NULL) {
-        *pi_correction_out = (int16_t)correction;
-    }
-
-    return (int16_t)output;
+    return (int16_t)clamp_i32(trimmed, 0, APP_MOTOR_COMMAND_MAX);
 }
 
-static bool update_one_encoder_fault_window(
+static void begin_braking(void)
+{
+    motor_brake();
+    gMotion.brake_ticks = 0U;
+    gMotion.current_base_pwm = 0;
+    gMotion.last_left_pwm = 0;
+    gMotion.last_right_pwm = 0;
+    gMotion.debug.left_pwm = 0;
+    gMotion.debug.right_pwm = 0;
+    gMotion.state = MOTION_BRAKING;
+}
+
+static bool start_targets(
+    MotionState state,
+    int32_t target_left,
+    int32_t target_right,
+    int16_t max_pwm)
+{
+    EncoderSnapshot snapshot;
+    MotionProfile profile;
+
+    if (motion_is_busy()) {
+        return false;
+    }
+
+    profile = get_motion_profile(state);
+    max_pwm = (int16_t)clamp_i32(
+        max_pwm,
+        profile.minimum_pwm,
+        profile.control_max_pwm);
+
+    encoder_take_snapshot(&snapshot);
+
+    gMotion.start_left = snapshot.left_count;
+    gMotion.start_right = snapshot.right_count;
+    gMotion.target_left = target_left;
+    gMotion.target_right = target_right;
+    gMotion.left_filtered_speed_x16 = 0;
+    gMotion.right_filtered_speed_x16 = 0;
+    gMotion.left_fault_progress = 0;
+    gMotion.right_fault_progress = 0;
+    gMotion.left_fault_ticks = 0U;
+    gMotion.right_fault_ticks = 0U;
+    gMotion.encoder_fault_grace_ticks =
+        APP_ENCODER_FAULT_STARTUP_GRACE_TICKS;
+    gMotion.encoder_fault_flags = 0U;
+    gMotion.last_control_tick = 0U;
+    gMotion.control_time_initialized = false;
+    gMotion.elapsed_ticks = 0U;
+    gMotion.brake_ticks = 0U;
+    gMotion.max_pwm = max_pwm;
+    gMotion.current_base_pwm = 0;
+    gMotion.last_left_pwm = 0;
+    gMotion.last_right_pwm = 0;
+    gMotion.debug = (MotionDebugData){0};
+    gMotion.state = state;
+    motor_enable();
+    return true;
+}
+
+static bool update_one_fault_window(
     int32_t normalized_delta,
-    int16_t output_pwm,
-    int32_t target_speed_x16,
+    int16_t magnitude_pwm,
     int32_t *progress,
     uint16_t *ticks,
-    uint16_t elapsed_ticks)
+    uint32_t elapsed_ticks)
 {
-    bool active;
     uint32_t updated_ticks;
 
-    active =
-        (output_pwm >= APP_ENCODER_FAULT_MIN_PWM) &&
-        (target_speed_x16 >= APP_ENCODER_FAULT_MIN_TARGET_SPEED_X16);
+    if ((progress == NULL) || (ticks == NULL)) {
+        return false;
+    }
 
-    if (!active) {
+    if (magnitude_pwm < APP_ENCODER_FAULT_MIN_PWM) {
         *progress = 0;
         *ticks = 0U;
         return false;
@@ -384,50 +352,43 @@ static bool update_one_encoder_fault_window(
         return false;
     }
 
-    active = *progress < APP_ENCODER_FAULT_MIN_PROGRESS_COUNT;
-    *progress = 0;
-    *ticks = 0U;
-    return active;
+    {
+        bool fault = *progress < APP_ENCODER_FAULT_MIN_PROGRESS_COUNT;
+        *progress = 0;
+        *ticks = 0U;
+        return fault;
+    }
 }
 
 static bool update_encoder_fault_detection(
     int32_t left_delta,
     int32_t right_delta,
-    int32_t left_target_speed_x16,
-    int32_t right_target_speed_x16,
-    int16_t left_pwm,
-    int16_t right_pwm,
-    uint16_t elapsed_ticks)
+    int16_t left_magnitude,
+    int16_t right_magnitude,
+    uint32_t elapsed_ticks)
 {
     if (gMotion.encoder_fault_grace_ticks != 0U) {
         if (elapsed_ticks >= gMotion.encoder_fault_grace_ticks) {
             gMotion.encoder_fault_grace_ticks = 0U;
         } else {
-            gMotion.encoder_fault_grace_ticks =
-                (uint16_t)(gMotion.encoder_fault_grace_ticks - elapsed_ticks);
+            gMotion.encoder_fault_grace_ticks = (uint16_t)(
+                gMotion.encoder_fault_grace_ticks - elapsed_ticks);
         }
-
-        gMotion.left_fault_progress = 0;
-        gMotion.right_fault_progress = 0;
-        gMotion.left_fault_ticks = 0U;
-        gMotion.right_fault_ticks = 0U;
         return false;
     }
 
-    if (update_one_encoder_fault_window(
+    if (update_one_fault_window(
             left_delta,
-            (int16_t)abs_i32(left_pwm),
-            left_target_speed_x16,
+            left_magnitude,
             &gMotion.left_fault_progress,
             &gMotion.left_fault_ticks,
             elapsed_ticks)) {
         gMotion.encoder_fault_flags |= APP_ENCODER_FAULT_LEFT;
     }
 
-    if (update_one_encoder_fault_window(
+    if (update_one_fault_window(
             right_delta,
-            (int16_t)abs_i32(right_pwm),
-            right_target_speed_x16,
+            right_magnitude,
             &gMotion.right_fault_progress,
             &gMotion.right_fault_ticks,
             elapsed_ticks)) {
@@ -436,6 +397,7 @@ static bool update_encoder_fault_detection(
 
     if (gMotion.encoder_fault_flags != 0U) {
         motor_stop();
+        gMotion.current_base_pwm = 0;
         gMotion.last_left_pwm = 0;
         gMotion.last_right_pwm = 0;
         gMotion.debug.left_pwm = 0;
@@ -447,144 +409,113 @@ static bool update_encoder_fault_detection(
     return false;
 }
 
-static void begin_braking(void)
+static void update_running_motion(
+    const EncoderSnapshot *snapshot,
+    uint32_t elapsed_ticks)
 {
-    motor_brake();
-    gMotion.brake_ticks = 0U;
-    gMotion.current_base_pwm = 0;
-    gMotion.last_left_pwm = 0;
-    gMotion.last_right_pwm = 0;
-    gMotion.left_speed_integral = 0;
-    gMotion.right_speed_integral = 0;
-    gMotion.state = MOTION_BRAKING;
-}
-
-static bool start_targets(
-    MotionState state,
-    int32_t target_left,
-    int32_t target_right,
-    int16_t max_pwm)
-{
-    if (motion_is_busy()) {
-        return false;
-    }
-
-    max_pwm = (int16_t)clamp_i32(
-        max_pwm,
-        APP_POSITION_MIN_PWM,
-        APP_MOTOR_COMMAND_MAX);
-
-    encoder_get_counts(&gMotion.start_left, &gMotion.start_right);
-    (void)encoder_take_left_delta();
-    (void)encoder_take_right_delta();
-
-    gMotion.target_left = target_left;
-    gMotion.target_right = target_right;
-    gMotion.sync_integral = 0;
-    gMotion.sync_previous_error = 0;
-    gMotion.left_speed_integral = 0;
-    gMotion.right_speed_integral = 0;
-    gMotion.left_filtered_speed_x16 = 0;
-    gMotion.right_filtered_speed_x16 = 0;
-    gMotion.left_fault_progress = 0;
-    gMotion.right_fault_progress = 0;
-    gMotion.left_fault_ticks = 0U;
-    gMotion.right_fault_ticks = 0U;
-    gMotion.encoder_fault_grace_ticks =
-        APP_ENCODER_FAULT_STARTUP_GRACE_TICKS;
-    gMotion.encoder_fault_flags = 0U;
-    gMotion.last_control_tick = app_tick_now();
-    gMotion.last_control_elapsed_ticks = 0U;
-    gMotion.max_pwm = max_pwm;
-    gMotion.current_base_pwm = 0;
-    gMotion.last_left_pwm = 0;
-    gMotion.last_right_pwm = 0;
-    gMotion.brake_ticks = 0U;
-    gMotion.elapsed_ticks = 0U;
-    gMotion.debug = (MotionDebugData){0};
-    gMotion.state = state;
-    motor_enable();
-    return true;
-}
-
-static void update_normalized_motion(
-    int32_t left_progress,
-    int32_t right_progress,
-    int32_t left_delta,
-    int32_t right_delta,
-    int32_t left_direction,
-    int32_t right_direction,
-    int32_t target,
-    uint16_t elapsed_ticks)
-{
-    int32_t left_travel = left_progress * left_direction;
-    int32_t right_travel = right_progress * right_direction;
-    int32_t normalized_left_delta = left_delta * left_direction;
-    int32_t normalized_right_delta = right_delta * right_direction;
-    int32_t average_travel = (left_travel + right_travel) / 2;
-    int32_t remaining = target - average_travel;
-    int32_t base_target_speed_x16;
-    int32_t max_target_speed_x16;
-    int32_t sync_speed_x16;
-    int32_t left_target_speed_x16;
-    int32_t right_target_speed_x16;
+    MotionProfile profile;
+    int32_t left_direction;
+    int32_t right_direction;
+    int32_t left_progress;
+    int32_t right_progress;
+    int32_t left_travel;
+    int32_t right_travel;
+    int32_t normalized_left_delta;
+    int32_t normalized_right_delta;
+    int32_t target;
+    int32_t average_travel;
+    int32_t remaining;
+    int32_t error;
+    int32_t correction;
+    int32_t left_magnitude;
+    int32_t right_magnitude;
     int16_t target_base_pwm;
-    int16_t left_magnitude;
-    int16_t right_magnitude;
-    int16_t left_pi_pwm;
-    int16_t right_pi_pwm;
+    uint16_t gain_ticks;
 
-    if (remaining <= APP_POSITION_TOLERANCE_COUNT) {
-        begin_braking();
+    if (snapshot == NULL) {
         return;
     }
 
-    target_base_pwm = approach_profile(remaining, gMotion.max_pwm);
-    gMotion.current_base_pwm = slew_base_pwm(
-        gMotion.current_base_pwm,
-        target_base_pwm,
-        elapsed_ticks);
+    profile = get_motion_profile(gMotion.state);
+    left_direction = gMotion.target_left >= 0 ? 1 : -1;
+    right_direction = gMotion.target_right >= 0 ? 1 : -1;
+    target = abs_i32(gMotion.target_left);
 
-    gMotion.left_filtered_speed_x16 = update_filtered_speed(
+    left_progress = snapshot->left_count - gMotion.start_left;
+    right_progress = snapshot->right_count - gMotion.start_right;
+    left_travel = left_progress * left_direction;
+    right_travel = right_progress * right_direction;
+    normalized_left_delta = snapshot->left_delta * left_direction;
+    normalized_right_delta = snapshot->right_delta * right_direction;
+
+    average_travel = (left_travel + right_travel) / 2;
+    remaining = target - average_travel;
+
+    gMotion.left_filtered_speed_x16 = filtered_speed_x16(
         gMotion.left_filtered_speed_x16,
         normalized_left_delta,
         elapsed_ticks);
-    gMotion.right_filtered_speed_x16 = update_filtered_speed(
+    gMotion.right_filtered_speed_x16 = filtered_speed_x16(
         gMotion.right_filtered_speed_x16,
         normalized_right_delta,
         elapsed_ticks);
 
-    base_target_speed_x16 = pwm_to_speed_x16(gMotion.current_base_pwm);
-    max_target_speed_x16 = pwm_to_speed_x16(gMotion.max_pwm);
-    sync_speed_x16 = synchronization_speed_correction_x16(
-        left_travel,
-        right_travel,
+    /* Completion requires both wheels to reach their own target. This avoids
+     * stopping early when one encoder is ahead of the other. */
+    if ((left_travel >= target - profile.tolerance_counts) &&
+        (right_travel >= target - profile.tolerance_counts)) {
+        begin_braking();
+        return;
+    }
+
+    target_base_pwm = position_profile_pwm(
         remaining,
-        elapsed_ticks);
-
-    left_target_speed_x16 = clamp_i32(
-        base_target_speed_x16 - sync_speed_x16,
-        0,
-        max_target_speed_x16);
-    right_target_speed_x16 = clamp_i32(
-        base_target_speed_x16 + sync_speed_x16,
-        0,
-        max_target_speed_x16);
-
-    left_magnitude = wheel_speed_controller(
-        left_target_speed_x16,
-        gMotion.left_filtered_speed_x16,
-        &gMotion.left_speed_integral,
         gMotion.max_pwm,
-        elapsed_ticks,
-        &left_pi_pwm);
-    right_magnitude = wheel_speed_controller(
-        right_target_speed_x16,
-        gMotion.right_filtered_speed_x16,
-        &gMotion.right_speed_integral,
-        gMotion.max_pwm,
-        elapsed_ticks,
-        &right_pi_pwm);
+        &profile);
+    gain_ticks = clamp_elapsed_ticks(elapsed_ticks);
+    gMotion.current_base_pwm = slew_pwm(
+        gMotion.current_base_pwm,
+        target_base_pwm,
+        gain_ticks,
+        profile.minimum_pwm);
+
+    error = left_travel - right_travel;
+    correction = synchronization_correction_pwm(error, &profile);
+
+    left_magnitude = apply_trim(
+        gMotion.current_base_pwm,
+        profile.left_trim_permille);
+    right_magnitude = apply_trim(
+        gMotion.current_base_pwm,
+        profile.right_trim_permille);
+
+    /* Positive error means left is ahead: reduce left and increase right. */
+    left_magnitude -= correction;
+    right_magnitude += correction;
+
+    left_magnitude = clamp_i32(left_magnitude, 0, gMotion.max_pwm);
+    right_magnitude = clamp_i32(right_magnitude, 0, gMotion.max_pwm);
+
+    /* A lagging wheel must still receive enough command to overcome static
+     * friction, even when the average position is already near the target. */
+    if ((left_travel < target - profile.tolerance_counts) &&
+        (left_magnitude < profile.approach_pwm)) {
+        left_magnitude = profile.approach_pwm;
+    }
+    if ((right_travel < target - profile.tolerance_counts) &&
+        (right_magnitude < profile.approach_pwm)) {
+        right_magnitude = profile.approach_pwm;
+    }
+
+    /* Never command a wheel farther once it has already crossed the target.
+     * The opposite wheel may continue forward to remove residual mismatch;
+     * no automatic reverse correction is used. */
+    if (left_travel >= target) {
+        left_magnitude = 0;
+    }
+    if (right_travel >= target) {
+        right_magnitude = 0;
+    }
 
     gMotion.last_left_pwm =
         (int16_t)(left_direction * left_magnitude);
@@ -597,28 +528,24 @@ static void update_normalized_motion(
     gMotion.debug.right_progress = right_travel;
     gMotion.debug.target_count = target;
     gMotion.debug.remaining_count = remaining;
+    gMotion.debug.synchronization_error = error;
+    gMotion.debug.synchronization_pwm = (int16_t)correction;
     gMotion.debug.base_pwm = gMotion.current_base_pwm;
     gMotion.debug.left_pwm = gMotion.last_left_pwm;
     gMotion.debug.right_pwm = gMotion.last_right_pwm;
-    gMotion.debug.left_target_speed_x16 = left_target_speed_x16;
-    gMotion.debug.right_target_speed_x16 = right_target_speed_x16;
     gMotion.debug.left_measured_speed_x16 =
         gMotion.left_filtered_speed_x16;
     gMotion.debug.right_measured_speed_x16 =
         gMotion.right_filtered_speed_x16;
-    gMotion.debug.synchronization_speed_x16 = sync_speed_x16;
-    gMotion.debug.left_speed_pi_pwm = left_pi_pwm;
-    gMotion.debug.right_speed_pi_pwm = right_pi_pwm;
     gMotion.debug.encoder_fault_flags = gMotion.encoder_fault_flags;
-    gMotion.debug.control_elapsed_ticks = elapsed_ticks;
+    gMotion.debug.encoder_fault_grace_ticks =
+        gMotion.encoder_fault_grace_ticks;
 
     (void)update_encoder_fault_detection(
         normalized_left_delta,
         normalized_right_delta,
-        left_target_speed_x16,
-        right_target_speed_x16,
-        left_magnitude,
-        right_magnitude,
+        (int16_t)left_magnitude,
+        (int16_t)right_magnitude,
         elapsed_ticks);
 
     gMotion.debug.encoder_fault_flags = gMotion.encoder_fault_flags;
@@ -673,93 +600,58 @@ bool motion_start_turn_deg(int32_t angle_deg, int16_t max_pwm)
         max_pwm);
 }
 
-void motion_update(void)
+void motion_update(uint32_t now_tick)
 {
-    uint32_t now_tick;
-    uint32_t elapsed_ticks_u32;
-    uint16_t elapsed_ticks;
-    int32_t left_count;
-    int32_t right_count;
-    int32_t left_progress;
-    int32_t right_progress;
-    int32_t left_delta;
-    int32_t right_delta;
+    EncoderSnapshot snapshot;
+    uint32_t elapsed_ticks;
 
     if (!motion_is_busy()) {
         return;
     }
 
-    now_tick = app_tick_now();
-    elapsed_ticks_u32 = now_tick - gMotion.last_control_tick;
-
-    /* A queued/catch-up call at the same real SysTick must not advance the
-     * speed PI, fault detector, brake timer or timeout. */
-    if (elapsed_ticks_u32 == 0U) {
+    if (!gMotion.control_time_initialized) {
+        gMotion.last_control_tick = now_tick;
+        gMotion.control_time_initialized = true;
         return;
     }
 
-    gMotion.last_control_tick = now_tick;
-    if (elapsed_ticks_u32 > UINT16_MAX) {
-        elapsed_ticks = UINT16_MAX;
-    } else {
-        elapsed_ticks = (uint16_t)elapsed_ticks_u32;
+    elapsed_ticks = now_tick - gMotion.last_control_tick;
+    if (elapsed_ticks == 0U) {
+        return;
     }
-    gMotion.last_control_elapsed_ticks = elapsed_ticks;
-    gMotion.debug.control_elapsed_ticks = elapsed_ticks;
+    gMotion.last_control_tick = now_tick;
+
+    if (elapsed_ticks > UINT16_MAX) {
+        gMotion.debug.control_elapsed_ticks = UINT16_MAX;
+    } else {
+        gMotion.debug.control_elapsed_ticks = (uint16_t)elapsed_ticks;
+    }
 
     if (gMotion.state == MOTION_BRAKING) {
-        uint32_t updated_brake_ticks =
-            (uint32_t)gMotion.brake_ticks + elapsed_ticks;
+        uint32_t updated = (uint32_t)gMotion.brake_ticks + elapsed_ticks;
 
-        if (updated_brake_ticks < APP_ACTIVE_BRAKE_TICKS) {
-            gMotion.brake_ticks = (uint16_t)updated_brake_ticks;
-        } else {
+        if (updated >= APP_ACTIVE_BRAKE_TICKS) {
             motor_stop();
             gMotion.brake_ticks = APP_ACTIVE_BRAKE_TICKS;
             gMotion.state = MOTION_DONE;
+        } else {
+            gMotion.brake_ticks = (uint16_t)updated;
         }
         return;
     }
 
-    encoder_get_counts(&left_count, &right_count);
-    left_delta = encoder_take_left_delta();
-    right_delta = encoder_take_right_delta();
-    left_progress = left_count - gMotion.start_left;
-    right_progress = right_count - gMotion.start_right;
+    encoder_take_snapshot(&snapshot);
+    update_running_motion(&snapshot, elapsed_ticks);
 
-    if (gMotion.state == MOTION_RUNNING_DISTANCE) {
-        int32_t direction = gMotion.target_left >= 0 ? 1 : -1;
-        update_normalized_motion(
-            left_progress,
-            right_progress,
-            left_delta,
-            right_delta,
-            direction,
-            direction,
-            abs_i32(gMotion.target_left),
-            elapsed_ticks);
-    } else if (gMotion.state == MOTION_RUNNING_TURN) {
-        int32_t left_direction = gMotion.target_left >= 0 ? 1 : -1;
-        int32_t right_direction = gMotion.target_right >= 0 ? 1 : -1;
-        update_normalized_motion(
-            left_progress,
-            right_progress,
-            left_delta,
-            right_delta,
-            left_direction,
-            right_direction,
-            abs_i32(gMotion.target_left),
-            elapsed_ticks);
-    }
-
-    if (!motion_is_busy()) {
+    if ((gMotion.state != MOTION_RUNNING_DISTANCE) &&
+        (gMotion.state != MOTION_RUNNING_TURN)) {
         return;
     }
 
-    gMotion.elapsed_ticks += elapsed_ticks_u32;
-    if ((gMotion.elapsed_ticks > APP_MOTION_TIMEOUT_TICKS) &&
-        (gMotion.state != MOTION_BRAKING)) {
+    gMotion.elapsed_ticks += elapsed_ticks;
+    if (gMotion.elapsed_ticks > APP_MOTION_TIMEOUT_TICKS) {
         motor_stop();
+        gMotion.current_base_pwm = 0;
         gMotion.last_left_pwm = 0;
         gMotion.last_right_pwm = 0;
         gMotion.debug.left_pwm = 0;
@@ -774,8 +666,8 @@ void motion_abort(void)
     gMotion.current_base_pwm = 0;
     gMotion.last_left_pwm = 0;
     gMotion.last_right_pwm = 0;
-    gMotion.left_speed_integral = 0;
-    gMotion.right_speed_integral = 0;
+    gMotion.debug.left_pwm = 0;
+    gMotion.debug.right_pwm = 0;
     gMotion.state = MOTION_IDLE;
 }
 

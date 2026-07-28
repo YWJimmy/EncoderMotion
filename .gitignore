@@ -1,41 +1,33 @@
-# CCS build output and workspace metadata
+# CCS / Eclipse build products
 Debug/
 Release/
 .settings/
-targetConfigs/
 .metadata/
-.launches/
-
-# Compiler, assembler and linker artifacts
-*.o
-*.obj
-*.d
 *.out
-*.elf
 *.map
-*.xml
+*.obj
+*.o
+*.d
+*.mk
 *.hex
 *.bin
 *.lst
+*.log
+*.launch
 
-# Patch and merge artifacts
+# Generated SysConfig output
+ti_msp_dl_config.c
+ti_msp_dl_config.h
+
+# Temporary and patch files
 *.patch
 *.diff
-*.rej
-*.orig
-
-# Logs, backups and temporary files
-*.log
+*.zip
 *.tmp
-*.temp
 *.bak
-*.swp
-*.swo
 *~
 
-# Editor and operating-system files
-.vscode/
-.idea/
+# OS/editor files
 .DS_Store
 Thumbs.db
-Desktop.ini
+.vscode/

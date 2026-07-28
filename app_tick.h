@@ -6,11 +6,9 @@
 
 void app_tick_init(void);
 
-/*
- * Returns true once when one or more real SysTick periods have elapsed.
- * Missed periods are coalesced instead of replayed as zero-time control calls.
- */
-bool app_tick_take(void);
+/* Returns one coalesced control request and an atomic tick snapshot.
+ * Missed periods are never replayed as zero-time control iterations. */
+bool app_tick_take(uint32_t *now_tick);
 
 uint32_t app_tick_now(void);
 uint32_t app_tick_get_overrun_count(void);

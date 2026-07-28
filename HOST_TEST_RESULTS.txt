@@ -1,0 +1,27 @@
+Host model regression results (GCC C11, -Wall -Wextra -Werror)
+
+forward3000-jitter:
+  state=DONE, target=21254, left=21249, right=21253, difference=4, ef=0
+
+forward3000-request1000:
+  request is safely capped to PWM 400
+  state=DONE, target=21254, left=21252, right=21255, difference=3, ef=0
+
+reverse500:
+  state=DONE, target=3542, left=-3536, right=-3540, difference=4, ef=0
+
+turn+90:
+  state=DONE, target=634, left=-628, right=632, difference=4, ef=0
+
+turn-90:
+  state=DONE, target=634, left=628, right=-632, difference=4, ef=0
+
+startup-delay:
+  simulated 350 ms motor start delay, state=DONE, ef=0
+
+freeze-left:
+  simulated left encoder freeze, state=ENCFAULT
+
+The model included a 5% right/left drive-gain mismatch and variable 1-8 tick
+control service intervals. These tests verify controller logic, not tyre slip,
+wheel diameter, wiring, supply voltage, or real turning geometry.

@@ -6,10 +6,12 @@
 typedef struct {
     volatile int32_t count;
     volatile int32_t delta;
-    uint8_t previous_state;
+    volatile uint8_t previous_state;
     volatile uint32_t valid_transition_count;
     volatile uint32_t invalid_transition_count;
     volatile uint32_t duplicate_state_count;
+    volatile uint32_t a_edge_count;
+    volatile uint32_t b_edge_count;
 } Encoder;
 
 typedef struct {
@@ -17,7 +19,19 @@ typedef struct {
     uint32_t valid_transition_count;
     uint32_t invalid_transition_count;
     uint32_t duplicate_state_count;
+    uint32_t a_edge_count;
+    uint32_t b_edge_count;
+    uint8_t ab_state;
 } EncoderStatistics;
+
+typedef struct {
+    int32_t left_count;
+    int32_t right_count;
+    int32_t left_delta;
+    int32_t right_delta;
+    uint8_t left_ab_state;
+    uint8_t right_ab_state;
+} EncoderSnapshot;
 
 extern Encoder gLeftEncoder;
 extern Encoder gRightEncoder;
@@ -29,6 +43,13 @@ void encoder_get_counts(int32_t *left_count, int32_t *right_count);
 void encoder_get_statistics(
     EncoderStatistics *left_statistics,
     EncoderStatistics *right_statistics);
+
+/* Atomically reads both wheel counts and both deltas, then clears both
+ * deltas in the same critical section. Use this in the controller. */
+void encoder_take_snapshot(EncoderSnapshot *snapshot);
+
+/* Kept for source compatibility with older code. New control code should use
+ * encoder_take_snapshot(). */
 int32_t encoder_take_left_delta(void);
 int32_t encoder_take_right_delta(void);
 

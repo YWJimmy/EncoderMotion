@@ -25,9 +25,9 @@ typedef struct {
     GPIO_Regs *port;
     uint32_t pin;
     uint8_t active_state;
-    uint8_t previous_sample;
+    uint8_t raw_state;
     uint8_t stable_state;
-    uint8_t same_samples;
+    uint32_t raw_change_tick;
 } Button;
 
 typedef enum {
@@ -44,6 +44,11 @@ static Button gConfirmButton = {
     CONFIRM_BUTTON_PORT, CONFIRM_BUTTON_PIN, 0U, 1U, 1U, 0U
 };
 
+static uint8_t button_read(const Button *button)
+{
+    return DL_GPIO_readPins(button->port, button->pin) != 0U ? 1U : 0U;
+}
+
 static void buttons_init(void)
 {
     DL_GPIO_initDigitalInputFeatures(
@@ -59,35 +64,28 @@ static void buttons_init(void)
         DL_GPIO_HYSTERESIS_ENABLE,
         DL_GPIO_WAKEUP_DISABLE);
 
-    gSelectButton.previous_sample =
-        DL_GPIO_readPins(SELECT_BUTTON_PORT, SELECT_BUTTON_PIN) != 0U ?
-        1U : 0U;
-    gSelectButton.stable_state = gSelectButton.previous_sample;
+    gSelectButton.raw_state = button_read(&gSelectButton);
+    gSelectButton.stable_state = gSelectButton.raw_state;
+    gSelectButton.raw_change_tick = 0U;
 
-    gConfirmButton.previous_sample =
-        DL_GPIO_readPins(CONFIRM_BUTTON_PORT, CONFIRM_BUTTON_PIN) != 0U ?
-        1U : 0U;
-    gConfirmButton.stable_state = gConfirmButton.previous_sample;
+    gConfirmButton.raw_state = button_read(&gConfirmButton);
+    gConfirmButton.stable_state = gConfirmButton.raw_state;
+    gConfirmButton.raw_change_tick = 0U;
 }
 
-static bool button_take_press(Button *button)
+static bool button_take_press(Button *button, uint32_t now_tick)
 {
-    uint8_t sample =
-        DL_GPIO_readPins(button->port, button->pin) != 0U ?
-        1U : 0U;
+    uint8_t sample = button_read(button);
 
-    if (sample != button->previous_sample) {
-        button->previous_sample = sample;
-        button->same_samples = 0U;
+    if (sample != button->raw_state) {
+        button->raw_state = sample;
+        button->raw_change_tick = now_tick;
         return false;
     }
 
-    if (button->same_samples < APP_BUTTON_DEBOUNCE_TICKS) {
-        button->same_samples++;
-    }
-
-    if ((button->same_samples == APP_BUTTON_DEBOUNCE_TICKS) &&
-        (button->stable_state != sample)) {
+    if ((sample != button->stable_state) &&
+        ((uint32_t)(now_tick - button->raw_change_tick) >=
+         APP_BUTTON_DEBOUNCE_TICKS)) {
         button->stable_state = sample;
         return sample == button->active_state;
     }
@@ -132,13 +130,14 @@ static void draw_status_pages(void)
     oled_clear_page(6U);
     oled_show_string(0U, 6U, "STATE:");
     oled_show_string(42U, 6U, motion_state_text(motion_get_state()));
-
     oled_clear_page(7U);
     oled_show_string(0U, 7U, "L:");
     oled_show_i32(12U, 7U, left_count);
     oled_show_string(66U, 7U, "R:");
     oled_show_i32(78U, 7U, right_count);
 
+    /* This only marks pages dirty. Physical I2C transmission occurs later in
+     * oled_service(), outside the control update. */
     (void)oled_update_pages(6U, 2U);
 }
 
@@ -176,7 +175,7 @@ int main(void)
 {
     MenuItem selected = MENU_FORWARD_500_MM;
     MotionState displayed_state;
-    uint16_t status_refresh_tick = 0U;
+    uint32_t last_status_tick = 0U;
 
     SYSCFG_DL_init();
     motor_init();
@@ -192,22 +191,26 @@ int main(void)
     displayed_state = motion_get_state();
 
     while (1) {
-        if (app_tick_take()) {
-            bool select_pressed = button_take_press(&gSelectButton);
-            bool confirm_pressed = button_take_press(&gConfirmButton);
+        uint32_t now_tick;
+
+        if (app_tick_take(&now_tick)) {
+            bool select_pressed =
+                button_take_press(&gSelectButton, now_tick);
+            bool confirm_pressed =
+                button_take_press(&gConfirmButton, now_tick);
 
             if (motion_is_busy()) {
                 if (confirm_pressed) {
                     motion_abort();
                 } else {
-                    motion_update();
+                    motion_update(now_tick);
                 }
             } else {
                 if (select_pressed) {
                     selected = (MenuItem)(
                         ((uint8_t)selected + 1U) % MENU_ITEM_COUNT);
                     draw_menu(selected);
-                    status_refresh_tick = 0U;
+                    last_status_tick = now_tick;
                 }
 
                 if (confirm_pressed) {
@@ -218,19 +221,19 @@ int main(void)
             if (motion_get_state() != displayed_state) {
                 displayed_state = motion_get_state();
                 draw_status_pages();
-                status_refresh_tick = 0U;
-            } else if (status_refresh_tick >=
+                last_status_tick = now_tick;
+            } else if ((uint32_t)(now_tick - last_status_tick) >=
                        APP_OLED_STATUS_PERIOD_TICKS) {
                 draw_status_pages();
-                status_refresh_tick = 0U;
-            } else {
-                status_refresh_tick++;
+                last_status_tick = now_tick;
             }
 
-            serial_log_task(app_tick_now());
+            serial_log_task(now_tick);
             continue;
         }
 
+        /* Potentially slow peripherals are serviced only when no control
+         * update is pending. */
         oled_service(app_tick_now());
         serial_log_service();
         __WFI();

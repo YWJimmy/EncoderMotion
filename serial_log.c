@@ -149,7 +149,7 @@ static void queue_event(uint32_t now_tick, MotionState state)
 
 static void queue_motion_line(uint32_t now_tick)
 {
-    char line[288];
+    char line[256];
     MotionDebugData debug;
     TextBuilder builder = {line, (uint16_t)sizeof(line), 0U, false};
 
@@ -167,22 +167,16 @@ static void queue_motion_line(uint32_t now_tick)
     builder_put_i32(&builder, debug.target_count);
     builder_put_string(&builder, ",rm=");
     builder_put_i32(&builder, debug.remaining_count);
+    builder_put_string(&builder, ",er=");
+    builder_put_i32(&builder, debug.synchronization_error);
+    builder_put_string(&builder, ",co=");
+    builder_put_i32(&builder, debug.synchronization_pwm);
     builder_put_string(&builder, ",bp=");
     builder_put_i32(&builder, debug.base_pwm);
-    builder_put_string(&builder, ",tl=");
-    builder_put_i32(&builder, debug.left_target_speed_x16);
-    builder_put_string(&builder, ",tr=");
-    builder_put_i32(&builder, debug.right_target_speed_x16);
     builder_put_string(&builder, ",sl=");
     builder_put_i32(&builder, debug.left_measured_speed_x16);
     builder_put_string(&builder, ",sr=");
     builder_put_i32(&builder, debug.right_measured_speed_x16);
-    builder_put_string(&builder, ",cl=");
-    builder_put_i32(&builder, debug.left_speed_pi_pwm);
-    builder_put_string(&builder, ",cr=");
-    builder_put_i32(&builder, debug.right_speed_pi_pwm);
-    builder_put_string(&builder, ",sc=");
-    builder_put_i32(&builder, debug.synchronization_speed_x16);
     builder_put_string(&builder, ",pl=");
     builder_put_i32(&builder, debug.left_pwm);
     builder_put_string(&builder, ",pr=");
@@ -199,7 +193,7 @@ static void queue_motion_line(uint32_t now_tick)
 
 static void queue_system_line(uint32_t now_tick)
 {
-    char line[256];
+    char line[320];
     EncoderStatistics left;
     EncoderStatistics right;
     TextBuilder builder = {line, (uint16_t)sizeof(line), 0U, false};
@@ -218,12 +212,24 @@ static void queue_system_line(uint32_t now_tick)
     builder_put_u32(&builder, left.invalid_transition_count);
     builder_put_string(&builder, ",ld=");
     builder_put_u32(&builder, left.duplicate_state_count);
+    builder_put_string(&builder, ",la=");
+    builder_put_u32(&builder, left.a_edge_count);
+    builder_put_string(&builder, ",lb=");
+    builder_put_u32(&builder, left.b_edge_count);
+    builder_put_string(&builder, ",ls=");
+    builder_put_u32(&builder, left.ab_state);
     builder_put_string(&builder, ",rv=");
     builder_put_u32(&builder, right.valid_transition_count);
     builder_put_string(&builder, ",ri=");
     builder_put_u32(&builder, right.invalid_transition_count);
     builder_put_string(&builder, ",rd=");
     builder_put_u32(&builder, right.duplicate_state_count);
+    builder_put_string(&builder, ",ra=");
+    builder_put_u32(&builder, right.a_edge_count);
+    builder_put_string(&builder, ",rb=");
+    builder_put_u32(&builder, right.b_edge_count);
+    builder_put_string(&builder, ",rs=");
+    builder_put_u32(&builder, right.ab_state);
     builder_put_string(&builder, ",ol=");
     builder_put_u32(&builder, oled_is_online() ? 1U : 0U);
     builder_put_string(&builder, ",oe=");
@@ -241,7 +247,7 @@ static void queue_system_line(uint32_t now_tick)
 void serial_log_init(void)
 {
     static const char boot_message[] =
-        "BOOT,EncoderMotion speed-PI timing-fix,115200,8N1\r\n";
+        "BOOT,EncoderMotion stable-position-control,115200,8N1\r\n";
 
     gTxHead = 0U;
     gTxTail = 0U;

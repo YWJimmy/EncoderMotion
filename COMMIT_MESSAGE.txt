@@ -1,9 +1,10 @@
-fix(control): prevent false short-motion stops from tick backlog
+fix(control): replace unstable speed PI with deterministic position control
 
-- coalesce missed SysTick periods instead of replaying queued control calls
-- calculate wheel speed from encoder delta over the real elapsed tick count
-- scale PWM slew, PI integration, braking and timeout by elapsed time
-- ignore duplicate motion updates at the same system tick
-- add a 500 ms encoder-fault startup grace period
-- extend the encoder-fault observation window to 500 ms
-- expose control elapsed ticks and fault grace in UART telemetry
+- coalesce delayed SysTick requests and use real elapsed time
+- atomically sample both encoder counts and deltas
+- use separate straight and turn motion profiles
+- replace uncalibrated nested speed PI with conservative P-only synchronization
+- require both wheels to reach the target before braking
+- stop an arrived wheel without commanding reverse correction
+- make encoder fault timing use real elapsed ticks
+- add per-channel encoder edge and AB-state telemetry

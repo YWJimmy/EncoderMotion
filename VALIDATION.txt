@@ -1,28 +1,16 @@
-﻿EncoderMotion v5 validation record
+三轮检查记录
 
-Static validation:
-- motion.c, serial_log.c, empty.c and app_tick.c pass strict C11 syntax checks.
-- app_tick pending periods are coalesced instead of replayed.
-- speed samples are divided by actual elapsed SysTick periods.
-- PI and synchronization integrals use elapsed-time scaling with a bounded gain step.
-- encoder-fault timing uses real elapsed periods and a startup grace interval.
-- no patch files are included.
-- all ZIP entry names are ASCII.
+第一轮：完整仓库结构与调用链
+- 检查 main 分支全部源文件、SysConfig、PWM、GPIO、OLED、UART。
+- 确认主要故障来自积压 tick 补跑、非原子编码器采样和未经标定的速度 PI。
 
-Host plant regression results:
-- Straight 3000 mm with a simulated 40 ms block every 500 ms:
-  DONE, left=21248, right=21247, difference=1, ef=0.
-- 90 degree turn with the same blocking pattern:
-  DONE, left=-626, right=626, ef=0.
-- 350 ms simulated motor startup delay:
-  DONE without false encoder fault.
-- Frozen left encoder:
-  ENCFAULT, ef bit 0 set, both PWM outputs zero.
-- app_tick unit test:
-  three interrupts before servicing produce one pending control request and two overruns.
+第二轮：控制公式与边界
+- 检查前进、后退、左转、右转方向归一化。
+- 检查距离/角度换算、减速区、PWM 限幅、不得倒转、双轮完成条件。
+- 检查 32 位 tick 回绕、长间隔、超时和制动状态。
 
-Target-board validation still required:
-- CCS/MSPM0 SDK full build.
-- Verify normal MOT dt is usually 1.
-- Verify occasional dt > 1 does not stop motion.
-- Verify a real disconnected encoder still produces ENCFAULT.
+第三轮：静态构建与主机模型回归
+- 使用 GCC C11 -Wall -Wextra -Werror 编译 motion.c 主机测试。
+- 覆盖直行、反向、正负90度、随机1~8 tick调度间隔。
+- 覆盖左右电机5%模型差异、350ms起步迟滞和单侧编码器冻结。
+- 真实 CCS/实车仍需最终验证；硬件地线、轮胎和有效转向轮距不能由主机测试替代。

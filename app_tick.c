@@ -1,5 +1,7 @@
 #include "app_tick.h"
 
+#include <stddef.h>
+
 #include "app_config.h"
 #include "ti_msp_dl_config.h"
 
@@ -22,16 +24,23 @@ void app_tick_init(void)
         SysTick_CTRL_ENABLE_Msk;
 }
 
-bool app_tick_take(void)
+bool app_tick_take(uint32_t *now_tick)
 {
     uint32_t primask;
     bool available;
+
+    if (now_tick == NULL) {
+        return false;
+    }
 
     primask = __get_PRIMASK();
     __disable_irq();
 
     available = gTickPending;
-    gTickPending = false;
+    if (available) {
+        gTickPending = false;
+        *now_tick = gSystemTicks;
+    }
 
     __set_PRIMASK(primask);
     return available;
@@ -55,7 +64,7 @@ void SysTick_Handler(void)
         gOverrunCount++;
     }
 
-    /* Keep only one pending control request. Real elapsed time is recovered
-     * from app_tick_now() inside motion_update(). */
+    /* One request is enough. motion_update() receives the real current tick
+     * and calculates the true elapsed interval itself. */
     gTickPending = true;
 }

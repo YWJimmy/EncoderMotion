@@ -4,107 +4,108 @@
 #include <stdint.h>
 
 /* ==================== System timing ==================== */
-#define APP_CPU_CLOCK_HZ                 (32000000UL)
-#define APP_CONTROL_PERIOD_MS            (5UL)
-#define APP_CONTROL_TICK_RELOAD          \
+#define APP_CPU_CLOCK_HZ                      (32000000UL)
+#define APP_CONTROL_PERIOD_MS                 (5UL)
+#define APP_CONTROL_TICK_RELOAD               \
     (((APP_CPU_CLOCK_HZ / 1000UL) * APP_CONTROL_PERIOD_MS) - 1UL)
 
-#define APP_BUTTON_DEBOUNCE_MS           (50UL)
-#define APP_OLED_STATUS_PERIOD_MS        (250UL)
-#define APP_BUTTON_DEBOUNCE_TICKS        \
+#define APP_BUTTON_DEBOUNCE_MS                (50UL)
+#define APP_BUTTON_DEBOUNCE_TICKS             \
     (APP_BUTTON_DEBOUNCE_MS / APP_CONTROL_PERIOD_MS)
-#define APP_OLED_STATUS_PERIOD_TICKS     \
+#define APP_OLED_STATUS_PERIOD_MS             (250UL)
+#define APP_OLED_STATUS_PERIOD_TICKS          \
     (APP_OLED_STATUS_PERIOD_MS / APP_CONTROL_PERIOD_MS)
 
 /* ==================== OLED reliability ==================== */
-#define APP_OLED_I2C_DELAY_CYCLES        (32UL)
-#define APP_OLED_POWER_UP_DELAY_CYCLES   (1600000UL)
-#define APP_OLED_TRANSACTION_RETRIES     (2U)
-#define APP_OLED_RETRY_PERIOD_MS         (1000UL)
-#define APP_OLED_RETRY_PERIOD_TICKS      \
+#define APP_OLED_I2C_DELAY_CYCLES             (32UL)
+#define APP_OLED_POWER_UP_DELAY_CYCLES        (1600000UL)
+#define APP_OLED_TRANSACTION_RETRIES          (2U)
+#define APP_OLED_RETRY_PERIOD_MS              (1000UL)
+#define APP_OLED_RETRY_PERIOD_TICKS           \
     (APP_OLED_RETRY_PERIOD_MS / APP_CONTROL_PERIOD_MS)
-#define APP_OLED_PAGES_PER_SERVICE       (1U)
+#define APP_OLED_PAGES_PER_SERVICE            (1U)
 
 /* ==================== Serial telemetry ==================== */
-#define APP_SERIAL_BAUD_RATE             (115200UL)
-#define APP_SERIAL_REPORT_PERIOD_MS      (250UL)
-#define APP_SERIAL_REPORT_PERIOD_TICKS   \
+#define APP_SERIAL_BAUD_RATE                  (115200UL)
+#define APP_SERIAL_REPORT_PERIOD_MS           (250UL)
+#define APP_SERIAL_REPORT_PERIOD_TICKS        \
     (APP_SERIAL_REPORT_PERIOD_MS / APP_CONTROL_PERIOD_MS)
-#define APP_SERIAL_TX_BUFFER_SIZE        (1024U)
+#define APP_SERIAL_TX_BUFFER_SIZE             (1024U)
 
 /* ==================== PWM ==================== */
-#define APP_PWM_PERIOD_TICKS             (1600U)
-#define APP_MOTOR_COMMAND_MAX            (1000)
+#define APP_PWM_PERIOD_TICKS                  (1600U)
+#define APP_MOTOR_COMMAND_MAX                 (1000)
 
-/* ==================== Mechanical parameters ==================== */
-#define APP_WHEEL_DIAMETER_MM            (66L)
-#define APP_WHEEL_TRACK_MM               (114L)
-#define APP_ENCODER_COUNTS_PER_REV       (1469L)
-#define APP_PI_X10000                    (31416L)
+/* ==================== Mechanical calibration ==================== */
+/* 50 turns: left 73460 counts -> 1469.2 counts/rev.
+ * 58 turns: right 85193 counts -> 1468.84 counts/rev. */
+#define APP_ENCODER_COUNTS_PER_REV            (1469L)
+#define APP_WHEEL_DIAMETER_MM                 (66L)
+#define APP_PI_X10000                         (31416L)
 
-/* ==================== Position profile ==================== */
-#define APP_POSITION_DEFAULT_MAX_PWM     (300)
-#define APP_POSITION_MIN_PWM             (120)
-#define APP_POSITION_APPROACH_PWM        (105)
-#define APP_POSITION_DECEL_COUNTS        (700L)
-#define APP_POSITION_APPROACH_COUNTS     (100L)
-#define APP_POSITION_TOLERANCE_COUNT     (8L)
+/* This is an effective turning track, not necessarily the ruler-measured
+ * wheel-centre spacing. Calibrate it with repeated 360-degree turns. */
+#define APP_TURN_EFFECTIVE_TRACK_MM           (114L)
 
-/* Nominal feed-forward command slew per 5 ms tick. */
-#define APP_MOTOR_ACCEL_STEP             (4)
-#define APP_MOTOR_DECEL_STEP             (12)
+/* Optional open-loop trims. Keep both at 1000 until a straight run is
+ * repeatable. If the car consistently turns right, increase RIGHT slightly
+ * (for example 1005), or reduce LEFT slightly. */
+#define APP_STRAIGHT_LEFT_TRIM_PERMILLE       (1000L)
+#define APP_STRAIGHT_RIGHT_TRIM_PERMILLE      (1000L)
+#define APP_TURN_LEFT_TRIM_PERMILLE           (1000L)
+#define APP_TURN_RIGHT_TRIM_PERMILLE          (1000L)
 
-/* ==================== Wheel-speed PI inner loop ==================== */
-/*
- * Encoder speed is represented in counts/control-tick x 16.
- * 590 / 16 = 36.875 counts per 5 ms at PWM command 1000.
- * This initial value is based on the measured operating point:
- * about 8.48 counts/tick at PWM 230.
- */
-#define APP_SPEED_FULL_SCALE_COUNTS_PER_TICK_X16 (590L)
+/* ==================== Motion profiles ==================== */
+#define APP_POSITION_DEFAULT_MAX_PWM          (300)
+#define APP_STRAIGHT_CONTROL_MAX_PWM          (400)
+#define APP_TURN_CONTROL_MAX_PWM              (300)
 
-/* First-order IIR: filtered += (sample - filtered) / DIV. */
-#define APP_SPEED_FILTER_DIV             (4L)
+/* Straight profile: slow and conservative near the target. */
+#define APP_STRAIGHT_MIN_PWM                  (125)
+#define APP_STRAIGHT_APPROACH_PWM             (115)
+#define APP_STRAIGHT_DECEL_COUNTS             (900L)
+#define APP_STRAIGHT_APPROACH_COUNTS          (180L)
+#define APP_STRAIGHT_TOLERANCE_COUNTS         (8L)
 
-/* PI output is a PWM correction added to speed feed-forward. */
-#define APP_SPEED_PI_KP_NUM              (3L)
-#define APP_SPEED_PI_KP_DIV              (4L)
-#define APP_SPEED_PI_KI_DIV              (32L)
-#define APP_SPEED_PI_INTEGRAL_LIMIT      (6400L)
-#define APP_SPEED_PI_CORRECTION_LIMIT    (250L)
+/* Turn profile: separate parameters because tyre scrub is much larger. */
+#define APP_TURN_MIN_PWM                      (140)
+#define APP_TURN_APPROACH_PWM                 (125)
+#define APP_TURN_DECEL_COUNTS                 (420L)
+#define APP_TURN_APPROACH_COUNTS              (100L)
+#define APP_TURN_TOLERANCE_COUNTS             (6L)
+
+/* Feed-forward PWM slew, expressed per real 5 ms tick. */
+#define APP_MOTOR_ACCEL_STEP                  (4)
+#define APP_MOTOR_DECEL_STEP                  (14)
+#define APP_CONTROL_ELAPSED_LIMIT_TICKS       (20U)
 
 /* ==================== Left/right synchronization ==================== */
-/*
- * Position-difference controller output is target-speed correction in
- * counts/tick x 16. A positive error means the left wheel is ahead.
- */
-#define APP_SYNC_SPEED_KP_X16            (2L)
-#define APP_SYNC_SPEED_KI_DIV            (128L)
-#define APP_SYNC_SPEED_KD_X16            (3L)
-#define APP_SYNC_SPEED_INTEGRAL_LIMIT    (4096L)
-#define APP_SYNC_SPEED_CORRECTION_LIMIT_X16 (64L)
+/* Stable P-only cross coupling. No I/D terms are used because encoder
+ * quantisation and delayed main-loop service made them oscillatory. */
+#define APP_STRAIGHT_SYNC_DEADBAND_COUNTS     (2L)
+#define APP_STRAIGHT_SYNC_KP_DIV              (4L)
+#define APP_STRAIGHT_SYNC_LIMIT_PWM           (35L)
 
-/* ==================== Encoder-fault protection ==================== */
-#define APP_ENCODER_FAULT_MIN_PWM        (180)
-#define APP_ENCODER_FAULT_MIN_TARGET_SPEED_X16 (80L)
+#define APP_TURN_SYNC_DEADBAND_COUNTS         (2L)
+#define APP_TURN_SYNC_KP_DIV                  (3L)
+#define APP_TURN_SYNC_LIMIT_PWM               (40L)
 
-/* Allow motors and gearboxes to overcome static friction before monitoring. */
-#define APP_ENCODER_FAULT_STARTUP_GRACE_TICKS (100U) /* 500 ms */
+/* Diagnostic speed filter only; it does not drive PWM. Speed units are
+ * counts per 5 ms tick multiplied by 16. */
+#define APP_SPEED_FILTER_DIV                  (4L)
 
-/* A longer window avoids false faults during slow starts and short turns. */
-#define APP_ENCODER_FAULT_WINDOW_TICKS   (100U) /* 500 ms */
-#define APP_ENCODER_FAULT_MIN_PROGRESS_COUNT (12L)
-
-/* Limit controller gain scaling after an unusually long blocked interval. */
-#define APP_CONTROL_GAIN_ELAPSED_LIMIT_TICKS (20U)
-
-#define APP_ENCODER_FAULT_LEFT           (1U << 0)
-#define APP_ENCODER_FAULT_RIGHT          (1U << 1)
+/* ==================== Encoder/stall protection ==================== */
+#define APP_ENCODER_FAULT_LEFT                (1U << 0)
+#define APP_ENCODER_FAULT_RIGHT               (1U << 1)
+#define APP_ENCODER_FAULT_MIN_PWM             (180)
+#define APP_ENCODER_FAULT_STARTUP_GRACE_TICKS (200U) /* 1.0 s */
+#define APP_ENCODER_FAULT_WINDOW_TICKS        (200U) /* 1.0 s */
+#define APP_ENCODER_FAULT_MIN_PROGRESS_COUNT  (16L)
 
 /* TB6612 short-brake duration: 8 x 5 ms = 40 ms. */
-#define APP_ACTIVE_BRAKE_TICKS           (8U)
+#define APP_ACTIVE_BRAKE_TICKS                (8U)
 
-/* 5 ms x 12000 = 60 s timeout for long-distance tests. */
-#define APP_MOTION_TIMEOUT_TICKS         (12000U)
+/* Absolute safety timeout: 12000 x 5 ms = 60 s. */
+#define APP_MOTION_TIMEOUT_TICKS              (12000UL)
 
 #endif

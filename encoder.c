@@ -60,7 +60,7 @@ static void encoder_update(
     table_index = (uint8_t)((previous_state << 2U) | new_state);
     step = gQuadratureTable[table_index];
 
-    /* Always resynchronize after a changed state, including illegal jumps. */
+    /* Resynchronise even after an illegal two-bit jump, but do not count it. */
     encoder->previous_state = new_state;
 
     if (step == 0) {
@@ -77,6 +77,8 @@ static void encoder_update(
 void encoder_init(void)
 {
     uint32_t inputs;
+
+    DL_GPIO_disableInterrupt(ENCODER_PORT, ENCODER_PIN_MASK);
 
     DL_GPIO_initDigitalInputFeatures(
         ENCODER_ENC_L_A_IOMUX,
@@ -112,6 +114,8 @@ void encoder_init(void)
     gLeftEncoder.valid_transition_count = 0U;
     gLeftEncoder.invalid_transition_count = 0U;
     gLeftEncoder.duplicate_state_count = 0U;
+    gLeftEncoder.a_edge_count = 0U;
+    gLeftEncoder.b_edge_count = 0U;
 
     gRightEncoder.count = 0;
     gRightEncoder.delta = 0;
@@ -120,7 +124,10 @@ void encoder_init(void)
     gRightEncoder.valid_transition_count = 0U;
     gRightEncoder.invalid_transition_count = 0U;
     gRightEncoder.duplicate_state_count = 0U;
+    gRightEncoder.a_edge_count = 0U;
+    gRightEncoder.b_edge_count = 0U;
 
+    /* PA28/PA31 are in the upper half; PA12/PA13 are in the lower half. */
     DL_GPIO_setUpperPinsPolarity(
         ENCODER_PORT,
         DL_GPIO_PIN_28_EDGE_RISE_FALL |
@@ -132,12 +139,14 @@ void encoder_init(void)
 
     DL_GPIO_clearInterruptStatus(ENCODER_PORT, ENCODER_PIN_MASK);
     DL_GPIO_enableInterrupt(ENCODER_PORT, ENCODER_PIN_MASK);
+    NVIC_ClearPendingIRQ(GPIOA_INT_IRQn);
     NVIC_EnableIRQ(GPIOA_INT_IRQn);
 }
 
 void encoder_reset_counts(void)
 {
     uint32_t primask = __get_PRIMASK();
+
     __disable_irq();
     gLeftEncoder.count = 0;
     gLeftEncoder.delta = 0;
@@ -149,13 +158,18 @@ void encoder_reset_counts(void)
 void encoder_reset_statistics(void)
 {
     uint32_t primask = __get_PRIMASK();
+
     __disable_irq();
     gLeftEncoder.valid_transition_count = 0U;
     gLeftEncoder.invalid_transition_count = 0U;
     gLeftEncoder.duplicate_state_count = 0U;
+    gLeftEncoder.a_edge_count = 0U;
+    gLeftEncoder.b_edge_count = 0U;
     gRightEncoder.valid_transition_count = 0U;
     gRightEncoder.invalid_transition_count = 0U;
     gRightEncoder.duplicate_state_count = 0U;
+    gRightEncoder.a_edge_count = 0U;
+    gRightEncoder.b_edge_count = 0U;
     __set_PRIMASK(primask);
 }
 
@@ -194,6 +208,9 @@ void encoder_get_statistics(
         gLeftEncoder.invalid_transition_count;
     left_statistics->duplicate_state_count =
         gLeftEncoder.duplicate_state_count;
+    left_statistics->a_edge_count = gLeftEncoder.a_edge_count;
+    left_statistics->b_edge_count = gLeftEncoder.b_edge_count;
+    left_statistics->ab_state = gLeftEncoder.previous_state & 0x03U;
 
     right_statistics->count = gRightEncoder.count;
     right_statistics->valid_transition_count =
@@ -202,6 +219,33 @@ void encoder_get_statistics(
         gRightEncoder.invalid_transition_count;
     right_statistics->duplicate_state_count =
         gRightEncoder.duplicate_state_count;
+    right_statistics->a_edge_count = gRightEncoder.a_edge_count;
+    right_statistics->b_edge_count = gRightEncoder.b_edge_count;
+    right_statistics->ab_state = gRightEncoder.previous_state & 0x03U;
+
+    __set_PRIMASK(primask);
+}
+
+void encoder_take_snapshot(EncoderSnapshot *snapshot)
+{
+    uint32_t primask;
+
+    if (snapshot == NULL) {
+        return;
+    }
+
+    primask = __get_PRIMASK();
+    __disable_irq();
+
+    snapshot->left_count = gLeftEncoder.count;
+    snapshot->right_count = gRightEncoder.count;
+    snapshot->left_delta = gLeftEncoder.delta;
+    snapshot->right_delta = gRightEncoder.delta;
+    snapshot->left_ab_state = gLeftEncoder.previous_state & 0x03U;
+    snapshot->right_ab_state = gRightEncoder.previous_state & 0x03U;
+
+    gLeftEncoder.delta = 0;
+    gRightEncoder.delta = 0;
 
     __set_PRIMASK(primask);
 }
@@ -241,14 +285,27 @@ void GROUP1_IRQHandler(void)
 
     pending = DL_GPIO_getEnabledInterruptStatus(
         ENCODER_PORT, ENCODER_PIN_MASK);
-
     if (pending == 0U) {
         return;
     }
 
-    /* Clear the captured edges early; new edges remain pending for the next ISR. */
+    /* Clear captured edges early. A later edge remains pending for the next
+     * IRQ instead of being accidentally cleared at the end of this handler. */
     DL_GPIO_clearInterruptStatus(ENCODER_PORT, pending);
     inputs = DL_GPIO_readPins(ENCODER_PORT, ENCODER_PIN_MASK);
+
+    if ((pending & ENCODER_ENC_L_A_PIN) != 0U) {
+        gLeftEncoder.a_edge_count++;
+    }
+    if ((pending & ENCODER_ENC_L_B_PIN) != 0U) {
+        gLeftEncoder.b_edge_count++;
+    }
+    if ((pending & ENCODER_ENC_R_A_PIN) != 0U) {
+        gRightEncoder.a_edge_count++;
+    }
+    if ((pending & ENCODER_ENC_R_B_PIN) != 0U) {
+        gRightEncoder.b_edge_count++;
+    }
 
     if ((pending & (ENCODER_ENC_L_A_PIN | ENCODER_ENC_L_B_PIN)) != 0U) {
         encoder_update(

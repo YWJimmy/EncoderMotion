@@ -1,17 +1,21 @@
-EncoderMotion v5 serial output additions
+UART0 TX PA10 / XDS110，115200 8N1。
 
-MOT,...,ef=<fault>,dt=<elapsed_ticks>,fg=<fault_grace_ticks>
+MOT 字段：
+- t：系统时间，ms
+- st：DIST/TURN/BRAKE/DONE/TIMEOUT/ENCFAULT/IDLE
+- lp/rp：本次任务左右归一化进度
+- tg：目标计数
+- rm：按左右平均进度计算的剩余计数
+- er：left_progress - right_progress
+- co：P-only 同步 PWM 修正
+- bp：基础 PWM
+- sl/sr：诊断速度，count/5ms x16，不参与闭环
+- pl/pr：最终左右 PWM 命令
+- ef：编码器故障位，1=左，2=右，3=双侧
+- dt：本次控制距离上次控制的真实 5ms tick 数
+- fg：编码器故障检测启动宽限剩余 tick
 
-dt:
-  Number of real 5 ms SysTick periods represented by the latest control update.
-  Usually 1. A value greater than 1 means the main loop was blocked and the controller
-  normalized encoder speed using the actual elapsed time.
-
-fg:
-  Remaining startup-grace periods before encoder-stall monitoring becomes active.
-  100 at motion start, then decreases to 0. One period is 5 ms.
-
-SYS ov:
-  Count of SysTick events that occurred while a control request was already pending.
-  ov may increase during slow OLED software-I2C service. v5 no longer replays those
-  missed periods as zero-time motion updates.
+SYS 新增：
+- la/lb：左 A/B 边沿次数
+- ra/rb：右 A/B 边沿次数
+- ls/rs：左右当前 AB 状态（0~3）
