@@ -6,8 +6,8 @@
 
 typedef enum {
     MOTION_IDLE = 0,
-    MOTION_RUNNING_DISTANCE,
-    MOTION_RUNNING_TURN,
+    MOTION_DISTANCE,
+    MOTION_TURN,
     MOTION_BRAKING,
     MOTION_DONE,
     MOTION_TIMEOUT,
@@ -15,9 +15,10 @@ typedef enum {
 } MotionState;
 
 typedef struct {
+    MotionState state;
     int32_t left_progress;
     int32_t right_progress;
-    int32_t target_count;
+    int32_t target_counts;
     int32_t left_remaining;
     int32_t right_remaining;
     int16_t base_pwm;
@@ -26,17 +27,16 @@ typedef struct {
     int16_t right_pwm;
     int32_t left_delta;
     int32_t right_delta;
-    uint32_t elapsed_control_ticks;
     uint8_t encoder_fault_flags;
-} MotionDebugData;
+} MotionDebug;
 
 void motion_init(void);
 bool motion_start_distance_mm(int32_t distance_mm, int16_t max_pwm);
 bool motion_start_turn_deg(int32_t angle_deg, int16_t max_pwm);
-void motion_update(void);
+void motion_update(uint32_t now_ms);
 void motion_abort(void);
 bool motion_is_busy(void);
 MotionState motion_get_state(void);
-void motion_get_debug(MotionDebugData *debug_data);
+void motion_get_debug(MotionDebug *debug);
 
 #endif

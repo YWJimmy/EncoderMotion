@@ -1,6 +1,0 @@
-No file from the current GitHub main branch must be deleted.
-
-Delete or exclude from build only if these obsolete local experiment files exist:
-- wheel_speed_pi.c
-- wheel_speed_pi.h
-- duplicate copies of motion.c or encoder.c in another source folder

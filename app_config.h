@@ -3,84 +3,80 @@
 
 #include <stdint.h>
 
-/* ==================== System timing ==================== */
-#define APP_CPU_CLOCK_HZ                 (32000000UL)
-#define APP_CONTROL_PERIOD_MS            (5UL)
-#define APP_CONTROL_TICK_RELOAD          \
-    (((APP_CPU_CLOCK_HZ / 1000UL) * APP_CONTROL_PERIOD_MS) - 1UL)
-#define APP_BUTTON_DEBOUNCE_MS           (50UL)
-#define APP_BUTTON_DEBOUNCE_TICKS        \
-    (APP_BUTTON_DEBOUNCE_MS / APP_CONTROL_PERIOD_MS)
-#define APP_OLED_STATUS_PERIOD_MS        (250UL)
-#define APP_OLED_STATUS_PERIOD_TICKS     \
-    (APP_OLED_STATUS_PERIOD_MS / APP_CONTROL_PERIOD_MS)
+/* ======================== Clock and scheduling ======================== */
+#define APP_CPU_CLOCK_HZ                  (32000000UL)
+#define APP_SYSTICK_PERIOD_MS             (1UL)
+#define APP_CONTROL_PERIOD_MS             (10UL)
+#define APP_SERIAL_PERIOD_MS              (250UL)
+#define APP_OLED_STATUS_PERIOD_MS         (250UL)
+#define APP_BUTTON_DEBOUNCE_MS            (30UL)
 
-/* ==================== OLED ==================== */
-#define APP_OLED_I2C_DELAY_CYCLES        (32UL)
-#define APP_OLED_POWER_UP_DELAY_CYCLES   (1600000UL)
-#define APP_OLED_TRANSACTION_RETRIES     (2U)
-#define APP_OLED_RETRY_PERIOD_MS         (1000UL)
-#define APP_OLED_RETRY_PERIOD_TICKS      \
-    (APP_OLED_RETRY_PERIOD_MS / APP_CONTROL_PERIOD_MS)
-#define APP_OLED_PAGES_PER_SERVICE       (1U)
+#define APP_SYSTICK_RELOAD                \
+    (((APP_CPU_CLOCK_HZ / 1000UL) * APP_SYSTICK_PERIOD_MS) - 1UL)
 
-/* ==================== UART telemetry ==================== */
-#define APP_SERIAL_BAUD_RATE             (115200UL)
-#define APP_SERIAL_REPORT_PERIOD_MS      (250UL)
-#define APP_SERIAL_REPORT_PERIOD_TICKS   \
-    (APP_SERIAL_REPORT_PERIOD_MS / APP_CONTROL_PERIOD_MS)
-#define APP_SERIAL_TX_BUFFER_SIZE        (1024U)
+/* ======================== Mechanical calibration ===================== */
+#define APP_ENCODER_COUNTS_PER_REV        (1469L)
+#define APP_WHEEL_DIAMETER_MM             (66L)
+#define APP_WHEEL_TRACK_MM                (114L)
+#define APP_PI_X10000                     (31416L)
 
-/* ==================== Motor/PWM ==================== */
-#define APP_PWM_PERIOD_TICKS             (1600U)
-#define APP_MOTOR_COMMAND_MAX            (1000)
+/* Independent count signs. Change only after a manual direction test. */
+#define APP_LEFT_ENCODER_SIGN             (-1)
+#define APP_RIGHT_ENCODER_SIGN            (1)
 
-/* ==================== Mechanical calibration ==================== */
-#define APP_WHEEL_DIAMETER_MM            (66L)
-#define APP_ENCODER_COUNTS_PER_REV       (1469L)
-#define APP_TURN_EFFECTIVE_TRACK_MM      (114L)
-#define APP_PI_X10000                    (31416L)
+/* ======================== Motor and PWM =============================== */
+#define APP_PWM_PERIOD_TICKS              (1600U)
+#define APP_MOTOR_COMMAND_MAX             (1000)
+#define APP_STRAIGHT_PWM_LIMIT            (400)
+#define APP_TURN_PWM_LIMIT                (300)
 
-/* ==================== Straight motion ==================== */
-#define APP_STRAIGHT_CONTROL_MAX_PWM     (400)
-#define APP_STRAIGHT_MIN_PWM             (140)
-#define APP_STRAIGHT_APPROACH_PWM        (125)
-#define APP_STRAIGHT_DECEL_COUNTS        (900L)
-#define APP_STRAIGHT_APPROACH_COUNTS     (140L)
-#define APP_STRAIGHT_TOLERANCE_COUNTS    (8L)
-#define APP_STRAIGHT_SYNC_DEADBAND       (2L)
-#define APP_STRAIGHT_SYNC_KP_DIV         (4L)
-#define APP_STRAIGHT_SYNC_LIMIT          (35)
+/* Feed-forward trim in per-mille. Keep 1000/1000 until straight tests. */
+#define APP_LEFT_PWM_TRIM_PERMILLE        (1000L)
+#define APP_RIGHT_PWM_TRIM_PERMILLE       (1000L)
 
-/* ==================== In-place turn ==================== */
-#define APP_TURN_CONTROL_MAX_PWM         (300)
-#define APP_TURN_MIN_PWM                 (155)
-#define APP_TURN_APPROACH_PWM            (140)
-#define APP_TURN_DECEL_COUNTS            (320L)
-#define APP_TURN_APPROACH_COUNTS         (80L)
-#define APP_TURN_TOLERANCE_COUNTS        (6L)
-#define APP_TURN_SYNC_DEADBAND           (2L)
-#define APP_TURN_SYNC_KP_DIV             (4L)
-#define APP_TURN_SYNC_LIMIT              (40)
+/* ======================== Position profiles =========================== */
+#define APP_POSITION_TOLERANCE_COUNTS     (10L)
+#define APP_ACTIVE_BRAKE_MS               (40UL)
+#define APP_MOTION_TIMEOUT_MS             (60000UL)
 
-/* Optional mechanical feed-forward trims, in PWM command units. */
-#define APP_LEFT_PWM_TRIM                (0)
-#define APP_RIGHT_PWM_TRIM               (0)
+#define APP_STRAIGHT_MIN_PWM              (135)
+#define APP_STRAIGHT_APPROACH_PWM         (120)
+#define APP_STRAIGHT_DECEL_COUNTS         (900L)
+#define APP_STRAIGHT_APPROACH_COUNTS      (140L)
+#define APP_STRAIGHT_SYNC_DEADBAND        (3L)
+#define APP_STRAIGHT_SYNC_KP_NUM          (1L)
+#define APP_STRAIGHT_SYNC_KP_DIV          (3L)
+#define APP_STRAIGHT_SYNC_LIMIT           (35L)
 
-/* Command slew per real 5 ms tick. */
-#define APP_MOTOR_ACCEL_STEP             (4)
-#define APP_MOTOR_DECEL_STEP             (12)
+#define APP_TURN_MIN_PWM                  (155)
+#define APP_TURN_APPROACH_PWM             (140)
+#define APP_TURN_DECEL_COUNTS             (260L)
+#define APP_TURN_APPROACH_COUNTS          (70L)
+#define APP_TURN_SYNC_DEADBAND            (3L)
+#define APP_TURN_SYNC_KP_NUM              (1L)
+#define APP_TURN_SYNC_KP_DIV              (2L)
+#define APP_TURN_SYNC_LIMIT               (40L)
 
-/* ==================== Encoder fault protection ==================== */
-#define APP_ENCODER_FAULT_MIN_PWM        (180)
-#define APP_ENCODER_FAULT_STARTUP_TICKS  (200U) /* 1 second */
-#define APP_ENCODER_FAULT_WINDOW_TICKS   (200U) /* 1 second */
-#define APP_ENCODER_FAULT_MIN_PROGRESS   (16L)
-#define APP_ENCODER_FAULT_LEFT           (1U << 0)
-#define APP_ENCODER_FAULT_RIGHT          (1U << 1)
+#define APP_PWM_ACCEL_PER_CONTROL         (8)
+#define APP_PWM_DECEL_PER_CONTROL         (24)
 
-#define APP_ACTIVE_BRAKE_TICKS           (8U)   /* 40 ms */
-#define APP_MOTION_TIMEOUT_TICKS         (12000U) /* 60 seconds */
-#define APP_CONTROL_ELAPSED_LIMIT_TICKS  (20U)
+/* ======================== Encoder health protection ================== */
+#define APP_ENCODER_STALL_PROTECTION_ENABLE (1U)
+#define APP_ENCODER_STALL_GRACE_MS        (1000UL)
+#define APP_ENCODER_STALL_WINDOW_MS       (1000UL)
+#define APP_ENCODER_STALL_MIN_PWM         (180)
+#define APP_ENCODER_STALL_MIN_COUNTS      (20L)
+
+#define APP_ENCODER_FAULT_LEFT            (1U << 0)
+#define APP_ENCODER_FAULT_RIGHT           (1U << 1)
+
+/* ======================== UART ======================================== */
+#define APP_UART_TX_BUFFER_SIZE           (1024U)
+
+/* ======================== OLED ======================================== */
+#define APP_OLED_ENABLE                   (1U)
+#define APP_OLED_I2C_DELAY_CYCLES         (32U)
+#define APP_OLED_RETRY_PERIOD_MS          (1000UL)
+#define APP_OLED_TRANSACTION_RETRIES      (2U)
 
 #endif

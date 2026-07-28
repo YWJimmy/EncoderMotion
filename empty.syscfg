@@ -1,79 +1,95 @@
 /**
- * These arguments were used when this file was generated. They will be automatically applied on subsequent loads
- * via the GUI or CLI. Run CLI with '--help' for additional information on how to override these arguments.
+ * Fresh SysConfig for EncoderMotion rebuilt project.
  * @cliArgs --device "MSPM0G350X" --part "Default" --package "LQFP-64(PM)" --product "mspm0_sdk@2.11.00.07"
  * @v2CliArgs --device "MSPM0G3507" --package "LQFP-64(PM)" --product "mspm0_sdk@2.11.00.07"
  * @versions {"tool":"1.26.2+4477"}
  */
-/**
- * Import the modules used in this configuration.
- */
-const GPIO   = scripting.addModule("/ti/driverlib/GPIO", {}, false);
-const GPIO1  = GPIO.addInstance();
-const GPIO2  = GPIO.addInstance();
-const PWM    = scripting.addModule("/ti/driverlib/PWM", {}, false);
-const PWM1   = PWM.addInstance();
-const SYSCTL = scripting.addModule("/ti/driverlib/SYSCTL");
-const UART   = scripting.addModule("/ti/driverlib/UART", {}, false);
-const UART1  = UART.addInstance();
-/**
- * Write custom configuration values to the imported modules.
- */
-GPIO1.$name                         = "MOTOR_CTRL";
-GPIO1.associatedPins.create(5);
-GPIO1.associatedPins[0].$name       = "TB6612_AIN1";
-GPIO1.associatedPins[0].pin.$assign = "PB0";
-GPIO1.associatedPins[1].$name       = "TB6612_AIN2";
-GPIO1.associatedPins[1].pin.$assign = "PB1";
-GPIO1.associatedPins[2].$name       = "TB6612_BIN1";
-GPIO1.associatedPins[2].pin.$assign = "PB2";
-GPIO1.associatedPins[3].$name       = "TB6612_BIN2";
-GPIO1.associatedPins[3].pin.$assign = "PB3";
-GPIO1.associatedPins[4].$name       = "TB6612_STBY";
-GPIO1.associatedPins[4].pin.$assign = "PB4";
+
 const Board = scripting.addModule("/ti/driverlib/Board", {}, false);
-GPIO2.$name                              = "ENCODER";
-GPIO2.associatedPins.create(4);
-GPIO2.associatedPins[0].$name            = "ENC_L_A";
-GPIO2.associatedPins[0].internalResistor = "PULL_UP";
-GPIO2.associatedPins[0].direction        = "INPUT";
-GPIO2.associatedPins[0].pin.$assign      = "PA28";
-GPIO2.associatedPins[1].$name            = "ENC_L_B";
-GPIO2.associatedPins[1].direction        = "INPUT";
-GPIO2.associatedPins[1].pin.$assign      = "PA31";
-GPIO2.associatedPins[2].$name            = "ENC_R_A";
-GPIO2.associatedPins[2].direction        = "INPUT";
-GPIO2.associatedPins[2].pin.$assign      = "PA12";
-GPIO2.associatedPins[3].$name            = "ENC_R_B";
-GPIO2.associatedPins[3].direction        = "INPUT";
-GPIO2.associatedPins[3].pin.$assign      = "PA13";
-PWM1.$name                      = "MOTOR_PWM";
-PWM1.pwmMode                    = "EDGE_ALIGN_UP";
-PWM1.timerCount                 = 1600;
-PWM1.ccIndex                    = [2,3];
-PWM1.peripheral.$assign         = "TIMA0";
-PWM1.peripheral.ccp2Pin.$assign = "PB20";
-PWM1.peripheral.ccp3Pin.$assign = "PB13";
-PWM1.PWM_CHANNEL_2.$name        = "ti_driverlib_pwm_PWMTimerCC0";
-PWM1.PWM_CHANNEL_3.$name        = "ti_driverlib_pwm_PWMTimerCC3";
-PWM1.ccp2PinConfig.$name        = "ti_driverlib_gpio_GPIOPinGeneric2";
-PWM1.ccp3PinConfig.$name        = "ti_driverlib_gpio_GPIOPinGeneric3";
+const GPIO = scripting.addModule("/ti/driverlib/GPIO", {}, false);
+const PWM = scripting.addModule("/ti/driverlib/PWM", {}, false);
+const UART = scripting.addModule("/ti/driverlib/UART", {}, false);
+const SYSCTL = scripting.addModule("/ti/driverlib/SYSCTL");
+
+const MOTOR_CTRL = GPIO.addInstance();
+MOTOR_CTRL.$name = "MOTOR_CTRL";
+MOTOR_CTRL.associatedPins.create(5);
+MOTOR_CTRL.associatedPins[0].$name = "TB6612_AIN1";
+MOTOR_CTRL.associatedPins[0].pin.$assign = "PB0";
+MOTOR_CTRL.associatedPins[1].$name = "TB6612_AIN2";
+MOTOR_CTRL.associatedPins[1].pin.$assign = "PB1";
+MOTOR_CTRL.associatedPins[2].$name = "TB6612_BIN1";
+MOTOR_CTRL.associatedPins[2].pin.$assign = "PB2";
+MOTOR_CTRL.associatedPins[3].$name = "TB6612_BIN2";
+MOTOR_CTRL.associatedPins[3].pin.$assign = "PB3";
+MOTOR_CTRL.associatedPins[4].$name = "TB6612_STBY";
+MOTOR_CTRL.associatedPins[4].pin.$assign = "PB4";
+
+const ENCODER = GPIO.addInstance();
+ENCODER.$name = "ENCODER";
+ENCODER.associatedPins.create(4);
+ENCODER.associatedPins[0].$name = "ENC_L_A";
+ENCODER.associatedPins[0].direction = "INPUT";
+ENCODER.associatedPins[0].internalResistor = "PULL_UP";
+ENCODER.associatedPins[0].pin.$assign = "PA28";
+ENCODER.associatedPins[1].$name = "ENC_L_B";
+ENCODER.associatedPins[1].direction = "INPUT";
+ENCODER.associatedPins[1].internalResistor = "PULL_UP";
+ENCODER.associatedPins[1].pin.$assign = "PA31";
+ENCODER.associatedPins[2].$name = "ENC_R_A";
+ENCODER.associatedPins[2].direction = "INPUT";
+ENCODER.associatedPins[2].internalResistor = "PULL_UP";
+ENCODER.associatedPins[2].pin.$assign = "PA12";
+ENCODER.associatedPins[3].$name = "ENC_R_B";
+ENCODER.associatedPins[3].direction = "INPUT";
+ENCODER.associatedPins[3].internalResistor = "PULL_UP";
+ENCODER.associatedPins[3].pin.$assign = "PA13";
+
+/* Keep each GPIO instance on a single port so SysConfig emits a valid *_PORT macro. */
+const OLED_IO = GPIO.addInstance();
+OLED_IO.$name = "OLED_IO";
+OLED_IO.associatedPins.create(2);
+OLED_IO.associatedPins[0].$name = "SCL";
+OLED_IO.associatedPins[0].pin.$assign = "PB8";
+OLED_IO.associatedPins[1].$name = "SDA";
+OLED_IO.associatedPins[1].pin.$assign = "PB9";
+
+const BUTTON_SELECT = GPIO.addInstance();
+BUTTON_SELECT.$name = "BUTTON_SELECT";
+BUTTON_SELECT.associatedPins.create(1);
+BUTTON_SELECT.associatedPins[0].$name = "INPUT";
+BUTTON_SELECT.associatedPins[0].direction = "INPUT";
+BUTTON_SELECT.associatedPins[0].pin.$assign = "PA18";
+
+const BUTTON_CONFIRM = GPIO.addInstance();
+BUTTON_CONFIRM.$name = "BUTTON_CONFIRM";
+BUTTON_CONFIRM.associatedPins.create(1);
+BUTTON_CONFIRM.associatedPins[0].$name = "INPUT";
+BUTTON_CONFIRM.associatedPins[0].direction = "INPUT";
+BUTTON_CONFIRM.associatedPins[0].internalResistor = "PULL_UP";
+BUTTON_CONFIRM.associatedPins[0].pin.$assign = "PB21";
+
+const MOTOR_PWM = PWM.addInstance();
+MOTOR_PWM.$name = "MOTOR_PWM";
+MOTOR_PWM.pwmMode = "EDGE_ALIGN_UP";
+MOTOR_PWM.timerCount = 1600;
+MOTOR_PWM.ccIndex = [2,3];
+MOTOR_PWM.peripheral.$assign = "TIMA0";
+MOTOR_PWM.peripheral.ccp2Pin.$assign = "PB20";
+MOTOR_PWM.peripheral.ccp3Pin.$assign = "PB13";
+MOTOR_PWM.PWM_CHANNEL_2.$name = "LEFT_PWM";
+MOTOR_PWM.PWM_CHANNEL_3.$name = "RIGHT_PWM";
+
+const UART_DEBUG = UART.addInstance();
+UART_DEBUG.$name = "UART_DEBUG";
+UART_DEBUG.direction = "TX";
+UART_DEBUG.enableFIFO = true;
+UART_DEBUG.targetBaudRate = 115200;
+UART_DEBUG.peripheral.$assign = "UART0";
+UART_DEBUG.peripheral.txPin.$assign = "PA10";
+
 SYSCTL.forceDefaultClkConfig = true;
-
-UART1.$name                    = "UART_DEBUG";
-UART1.direction                = "TX";
-UART1.enableFIFO               = true;
-UART1.targetBaudRate           = 115200;
-UART1.txFifoThreshold          = "DL_UART_TX_FIFO_LEVEL_ONE_ENTRY";
-UART1.peripheral.$assign       = "UART0";
-UART1.peripheral.txPin.$assign = "PA10";
-UART1.txPinConfig.$name        = "ti_driverlib_gpio_GPIOPinGeneric4";
-
-/**
- * Pinmux solution for unlocked pins/peripherals. This ensures that minor changes to the automatic solver in a future
- * version of the tool will not impact the pinmux you originally saw. These lines can be deleted to re-solve.
- */
-Board.peripheral.$suggestSolution          = "DEBUGSS";
+Board.peripheral.$suggestSolution = "DEBUGSS";
 Board.peripheral.swclkPin.$suggestSolution = "PA20";
 Board.peripheral.swdioPin.$suggestSolution = "PA19";
-SYSCTL.peripheral.$suggestSolution         = "SYSCTL";
+SYSCTL.peripheral.$suggestSolution = "SYSCTL";

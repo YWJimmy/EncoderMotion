@@ -1,27 +1,26 @@
-Host model regression results (GCC C11, -Wall -Wextra -Werror)
+Host validation results
+=======================
+Strict syntax compile:
+  C11, -Wall, -Wextra, -Werror, -pedantic: PASS
 
-forward3000-jitter:
-  state=DONE, target=21254, left=21249, right=21253, difference=4, ef=0
+Quadrature transition tests:
+  forward cycle: +4
+  reverse cycle: -4
+  single-channel bounce net count: 0
+  illegal two-bit jumps: 0
+  result: PASS
 
-forward3000-request1000:
-  request is safely capped to PWM 400
-  state=DONE, target=21254, left=21252, right=21255, difference=3, ef=0
+Motion plant model, right drive approximately 5% stronger:
+  forward 500 mm: left=3533, right=3544, difference=-11, state=DONE
+  left turn 90 deg: left=-628, right=638, state=DONE
+  reverse 200 mm: both counts negative, state=DONE
+  result: PASS
 
-reverse500:
-  state=DONE, target=3542, left=-3536, right=-3540, difference=4, ef=0
+Project integrity:
+  XML metadata parse: PASS
+  SysConfig pin uniqueness: PASS
+  one main, one SysTick_Handler, one GROUP1_IRQHandler: PASS
+  no queued tick module and no speed-PI module: PASS
 
-turn+90:
-  state=DONE, target=634, left=-628, right=632, difference=4, ef=0
-
-turn-90:
-  state=DONE, target=634, left=628, right=-632, difference=4, ef=0
-
-startup-delay:
-  simulated 350 ms motor start delay, state=DONE, ef=0
-
-freeze-left:
-  simulated left encoder freeze, state=ENCFAULT
-
-The model included a 5% right/left drive-gain mismatch and variable 1-8 tick
-control service intervals. These tests verify controller logic, not tyre slip,
-wheel diameter, wiring, supply voltage, or real turning geometry.
+Target CCS/MSPM0 compilation was not available in the host environment and must
+be performed after importing the project and regenerating SysConfig output.

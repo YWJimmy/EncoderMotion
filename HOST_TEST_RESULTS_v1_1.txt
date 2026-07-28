@@ -1,0 +1,10 @@
+All application C files: strict C11 syntax PASS
+Generated-header regression: PASS (USER_IO_PORT intentionally absent)
+
+Encoder test:
+encoder transition table: PASS
+
+Motion test:
+500mm state=4 left=3533 right=3544 diff=-11
+turn state=4 left=-628 right=638
+motion plant integration: PASS

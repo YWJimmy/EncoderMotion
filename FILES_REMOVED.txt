@@ -1,0 +1,16 @@
+这是全新工程，不应覆盖到旧项目目录。
+
+相对于旧项目，不再使用或不再包含：
+- app_tick.c
+- app_tick.h
+- 任何 wheel_speed_pi.c / wheel_speed_pi.h
+- 旧版本生成的 ti_msp_dl_config.c / ti_msp_dl_config.h
+- 旧 Debug/、Release/ 构建目录
+- 旧 targetConfigs 目录
+
+原因：
+- app_tick旧实现可能与app_time.c同时定义SysTick_Handler，造成链接冲突。
+- 旧速度PI和旧运动控制不属于本次重建架构。
+- SysConfig生成文件必须由本包empty.syscfg重新生成，不能混用。
+
+推荐操作：保留旧工程作为备份，将本包作为独立项目导入CCS。

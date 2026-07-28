@@ -4,92 +4,27 @@
 #include <stdint.h>
 
 #include "app_config.h"
-#include "app_tick.h"
+#include "app_time.h"
+#include "button.h"
 #include "encoder.h"
 #include "motion.h"
 #include "motor.h"
 #include "oled.h"
 #include "serial_log.h"
 
-#define SELECT_BUTTON_PORT  (GPIOA)
-#define SELECT_BUTTON_PIN   (DL_GPIO_PIN_18)
-#define SELECT_BUTTON_IOMUX (IOMUX_PINCM40)
-#define CONFIRM_BUTTON_PORT  (GPIOB)
-#define CONFIRM_BUTTON_PIN   (DL_GPIO_PIN_21)
-#define CONFIRM_BUTTON_IOMUX (IOMUX_PINCM49)
-#define MENU_ITEM_COUNT      (4U)
-
-typedef struct {
-    GPIO_Regs *port;
-    uint32_t pin;
-    uint8_t active_state;
-    uint8_t previous_sample;
-    uint8_t stable_state;
-    uint8_t same_samples;
-} Button;
-
 typedef enum {
-    MENU_FORWARD_500_MM = 0,
-    MENU_REVERSE_200_MM,
-    MENU_LEFT_90_DEG,
-    MENU_RIGHT_90_DEG
+    MENU_FORWARD_500 = 0,
+    MENU_REVERSE_200,
+    MENU_LEFT_90,
+    MENU_RIGHT_90,
+    MENU_COUNT
 } MenuItem;
-
-static Button gSelectButton = {
-    SELECT_BUTTON_PORT, SELECT_BUTTON_PIN, 1U, 0U, 0U, 0U
-};
-static Button gConfirmButton = {
-    CONFIRM_BUTTON_PORT, CONFIRM_BUTTON_PIN, 0U, 1U, 1U, 0U
-};
-
-static void buttons_init(void)
-{
-    DL_GPIO_initDigitalInputFeatures(
-        SELECT_BUTTON_IOMUX,
-        DL_GPIO_INVERSION_DISABLE,
-        DL_GPIO_RESISTOR_NONE,
-        DL_GPIO_HYSTERESIS_ENABLE,
-        DL_GPIO_WAKEUP_DISABLE);
-    DL_GPIO_initDigitalInputFeatures(
-        CONFIRM_BUTTON_IOMUX,
-        DL_GPIO_INVERSION_DISABLE,
-        DL_GPIO_RESISTOR_PULL_UP,
-        DL_GPIO_HYSTERESIS_ENABLE,
-        DL_GPIO_WAKEUP_DISABLE);
-
-    gSelectButton.previous_sample =
-        DL_GPIO_readPins(SELECT_BUTTON_PORT, SELECT_BUTTON_PIN) != 0U;
-    gSelectButton.stable_state = gSelectButton.previous_sample;
-    gConfirmButton.previous_sample =
-        DL_GPIO_readPins(CONFIRM_BUTTON_PORT, CONFIRM_BUTTON_PIN) != 0U;
-    gConfirmButton.stable_state = gConfirmButton.previous_sample;
-}
-
-static bool button_take_press(Button *button)
-{
-    uint8_t sample = DL_GPIO_readPins(button->port, button->pin) != 0U;
-
-    if (sample != button->previous_sample) {
-        button->previous_sample = sample;
-        button->same_samples = 0U;
-        return false;
-    }
-    if (button->same_samples < APP_BUTTON_DEBOUNCE_TICKS) {
-        button->same_samples++;
-    }
-    if ((button->same_samples == APP_BUTTON_DEBOUNCE_TICKS) &&
-        (button->stable_state != sample)) {
-        button->stable_state = sample;
-        return sample == button->active_state;
-    }
-    return false;
-}
 
 static const char *motion_state_text(MotionState state)
 {
     switch (state) {
-    case MOTION_RUNNING_DISTANCE:
-    case MOTION_RUNNING_TURN: return "RUN";
+    case MOTION_DISTANCE:
+    case MOTION_TURN: return "RUN";
     case MOTION_BRAKING: return "BRAKE";
     case MOTION_DONE: return "DONE";
     case MOTION_TIMEOUT: return "TIMEOUT";
@@ -106,46 +41,38 @@ static void draw_menu_line(uint8_t page, bool selected, const char *text)
     oled_show_string(12U, page, text);
 }
 
-static void draw_status_pages(void)
+static void draw_screen(MenuItem selected)
 {
     int32_t left_count;
     int32_t right_count;
 
     encoder_get_counts(&left_count, &right_count);
-    oled_clear_page(6U);
+    oled_clear();
+    oled_show_string(0U, 0U, "ENCODER MOTION");
+    oled_show_string(0U, 1U, "S1 SELECT S2 OK");
+    draw_menu_line(2U, selected == MENU_FORWARD_500, "FWD 500MM");
+    draw_menu_line(3U, selected == MENU_REVERSE_200, "REV 200MM");
+    draw_menu_line(4U, selected == MENU_LEFT_90, "LEFT 90DEG");
+    draw_menu_line(5U, selected == MENU_RIGHT_90, "RIGHT 90DEG");
     oled_show_string(0U, 6U, "STATE:");
     oled_show_string(42U, 6U, motion_state_text(motion_get_state()));
-    oled_clear_page(7U);
     oled_show_string(0U, 7U, "L:");
     oled_show_i32(12U, 7U, left_count);
     oled_show_string(66U, 7U, "R:");
     oled_show_i32(78U, 7U, right_count);
-    (void)oled_update_pages(6U, 2U);
+    oled_request_refresh(0U, 8U);
 }
 
-static void draw_menu(MenuItem selected)
-{
-    oled_clear();
-    oled_show_string(0U, 0U, "ENCODER MOTION");
-    oled_show_string(0U, 1U, "S1:SELECT S2:OK");
-    draw_menu_line(2U, selected == MENU_FORWARD_500_MM, "FWD 500MM");
-    draw_menu_line(3U, selected == MENU_REVERSE_200_MM, "REV 200MM");
-    draw_menu_line(4U, selected == MENU_LEFT_90_DEG, "LEFT 90DEG");
-    draw_menu_line(5U, selected == MENU_RIGHT_90_DEG, "RIGHT 90DEG");
-    draw_status_pages();
-    (void)oled_update_pages(0U, 8U);
-}
-
-static bool start_selected_motion(MenuItem selected)
+static bool start_menu_motion(MenuItem selected)
 {
     switch (selected) {
-    case MENU_FORWARD_500_MM:
+    case MENU_FORWARD_500:
         return motion_start_distance_mm(500, 300);
-    case MENU_REVERSE_200_MM:
+    case MENU_REVERSE_200:
         return motion_start_distance_mm(-200, 250);
-    case MENU_LEFT_90_DEG:
+    case MENU_LEFT_90:
         return motion_start_turn_deg(90, 250);
-    case MENU_RIGHT_90_DEG:
+    case MENU_RIGHT_90:
         return motion_start_turn_deg(-90, 250);
     default:
         return false;
@@ -154,58 +81,62 @@ static bool start_selected_motion(MenuItem selected)
 
 int main(void)
 {
-    MenuItem selected = MENU_FORWARD_500_MM;
-    MotionState displayed_state;
-    uint32_t last_status_tick = 0U;
+    MenuItem selected = MENU_FORWARD_500;
+    uint32_t last_control_ms = 0U;
+    uint32_t last_oled_ms = 0U;
+    MotionState last_drawn_state;
 
     SYSCFG_DL_init();
     motor_init();
     encoder_init();
     motion_init();
-    buttons_init();
-    (void)oled_init();
-    app_tick_init();
+    button_init();
+    app_time_init();
     serial_log_init();
+    (void)oled_init();
     __enable_irq();
 
-    draw_menu(selected);
-    displayed_state = motion_get_state();
+    last_drawn_state = motion_get_state();
+    draw_screen(selected);
 
     while (1) {
-        if (app_tick_take()) {
-            uint32_t now_tick = app_tick_now();
-            bool select_pressed = button_take_press(&gSelectButton);
-            bool confirm_pressed = button_take_press(&gConfirmButton);
+        uint32_t now_ms = app_time_now_ms();
+
+        button_update(now_ms);
+
+        if ((uint32_t)(now_ms - last_control_ms) >=
+            APP_CONTROL_PERIOD_MS) {
+            last_control_ms = now_ms;
 
             if (motion_is_busy()) {
-                if (confirm_pressed) {
+                if (button_take_press(BUTTON_CONFIRM)) {
                     motion_abort();
                 } else {
-                    motion_update();
+                    motion_update(now_ms);
                 }
             } else {
-                if (select_pressed) {
-                    selected = (MenuItem)(((uint8_t)selected + 1U) %
-                        MENU_ITEM_COUNT);
-                    draw_menu(selected);
+                if (button_take_press(BUTTON_SELECT)) {
+                    selected = (MenuItem)(
+                        ((uint8_t)selected + 1U) % (uint8_t)MENU_COUNT);
+                    draw_screen(selected);
                 }
-                if (confirm_pressed) {
-                    (void)start_selected_motion(selected);
+                if (button_take_press(BUTTON_CONFIRM)) {
+                    (void)start_menu_motion(selected);
                 }
             }
-
-            if ((motion_get_state() != displayed_state) ||
-                ((uint32_t)(now_tick - last_status_tick) >=
-                 APP_OLED_STATUS_PERIOD_TICKS)) {
-                displayed_state = motion_get_state();
-                last_status_tick = now_tick;
-                draw_status_pages();
-            }
-            serial_log_task(now_tick);
         }
 
-        oled_service(app_tick_now());
+        if ((motion_get_state() != last_drawn_state) ||
+            ((uint32_t)(now_ms - last_oled_ms) >=
+             APP_OLED_STATUS_PERIOD_MS)) {
+            last_drawn_state = motion_get_state();
+            last_oled_ms = now_ms;
+            draw_screen(selected);
+        }
+
+        serial_log_periodic(now_ms);
         serial_log_service();
+        oled_service(now_ms);
         __WFI();
     }
 }

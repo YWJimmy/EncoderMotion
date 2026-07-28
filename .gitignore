@@ -1,7 +1,6 @@
 Debug/
 Release/
 .settings/
-targetConfigs/
 .metadata/
 .launches/
 *.o
@@ -10,6 +9,7 @@ targetConfigs/
 *.out
 *.elf
 *.map
+*.xml.gen
 *.hex
 *.bin
 *.lst
