@@ -65,14 +65,17 @@ GPIO3.associatedPins[0].pin.$assign = "PB8";
 GPIO3.associatedPins[1].$name       = "SDA";
 GPIO3.associatedPins[1].pin.$assign = "PB9";
 
-GPIO4.$name                       = "BUTTON_SELECT";
-GPIO4.associatedPins[0].direction = "INPUT";
-GPIO4.associatedPins[0].$name     = "S1";
+GPIO4.$name                              = "BUTTON_SELECT";
+GPIO4.associatedPins[0].direction        = "INPUT";
+GPIO4.associatedPins[0].$name            = "S1";
+GPIO4.associatedPins[0].internalResistor = "PULL_UP";
+GPIO4.associatedPins[0].pin.$assign      = "PA18";
 
 GPIO5.$name                              = "BUTTON_CONFIRM";
 GPIO5.associatedPins[0].direction        = "INPUT";
 GPIO5.associatedPins[0].internalResistor = "PULL_UP";
 GPIO5.associatedPins[0].$name            = "S2";
+GPIO5.associatedPins[0].pin.$assign      = "PB21";
 
 PWM1.$name                      = "MOTOR_PWM";
 PWM1.pwmMode                    = "EDGE_ALIGN_UP";
@@ -105,9 +108,7 @@ UART1.peripheral.txPin.$assign         = "PA10";
  * version of the tool will not impact the pinmux you originally saw.  These lines can be completely deleted in order to
  * re-solve from scratch.
  */
-Board.peripheral.$suggestSolution            = "DEBUGSS";
-Board.peripheral.swclkPin.$suggestSolution   = "PA20";
-Board.peripheral.swdioPin.$suggestSolution   = "PA19";
-GPIO4.associatedPins[0].pin.$suggestSolution = "PB15";
-GPIO5.associatedPins[0].pin.$suggestSolution = "PB14";
-SYSCTL.peripheral.$suggestSolution           = "SYSCTL";
+Board.peripheral.$suggestSolution          = "DEBUGSS";
+Board.peripheral.swclkPin.$suggestSolution = "PA20";
+Board.peripheral.swdioPin.$suggestSolution = "PA19";
+SYSCTL.peripheral.$suggestSolution         = "SYSCTL";
